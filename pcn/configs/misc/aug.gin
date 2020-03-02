@@ -1,0 +1,9 @@
+import kblocks.framework.cache
+
+kb.framework.cache_managers.train_impl = @kb.framework.RepeatCacheManager
+RepeatCacheManager.manager_impl = @TFRecordsCacheManager
+
+RepeatCacheManager.num_repeats = %cache_repeats
+BaseCacheManager.preprocess = True
+
+# must define cache_repeats

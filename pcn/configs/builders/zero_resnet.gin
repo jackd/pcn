@@ -1,0 +1,15 @@
+include '../misc/l2-reg.gin'
+import pcn.builders.zero_resnet
+
+build_fn = @pcn.builders.zero_resnet
+
+pcn.builders.zero_resnet.filters0 = %filters0
+pcn.builders.zero_resnet.num_levels = %num_levels
+pcn.builders.zero_resnet.bucket_size = %bucket_size
+
+bucket_size = False
+
+filters0 = 32
+num_levels = 3
+
+model_id = 'zero_resnet'
