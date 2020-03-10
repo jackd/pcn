@@ -204,7 +204,7 @@ def maybe_reflect(positions, normals=None,
     if normals is None:
         return _maybe_reflect((positions,), **kwargs)[0], normals
     else:
-        return _maybe_reflect([positions, normals], **kwargs)
+        return _maybe_reflect((positions, normals), **kwargs)
 
 
 def random_scale(positions: tf.Tensor, stddev=None,

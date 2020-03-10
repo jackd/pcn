@@ -1,6 +1,6 @@
 include '../base.gin'
 include '../sources/pn2.gin'
-include '../builders/resnet.gin'
+include '../builders/resnet-double.gin'
 include '../misc/rlrp.gin'
 
 batch_size = 128
@@ -8,3 +8,4 @@ epochs = 500
 
 save_freq = 5
 validation_freq = 5
+cache_repeats = 16

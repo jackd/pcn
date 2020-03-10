@@ -1,0 +1,4 @@
+include 'single.gin'
+
+train/pcn.augment.rotate_scheme = 'none'
+pcn.single_problem_id.rotate = False

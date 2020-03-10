@@ -1,0 +1,5 @@
+include 'default.gin'
+train/pcn.augment.rotate_scheme = 'none'
+train/pcn.augment.drop_prob_limits = None
+
+problem_id = 'pn2-full-no-rot'

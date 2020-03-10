@@ -1,4 +1,5 @@
 import functools
+from pcn.augment.rigid import rotate_by_scheme
 import tensorflow as tf
 from kblocks.framework.sources import TfdsSource
 import gin
@@ -35,3 +36,22 @@ class ModelnetSource(TfdsSource):
                          if split == 'train' else self._validation_map_fn)
         map_fn = functools.partial(_map_fn, coords_map_fn)
         return dataset.map(map_fn, tf.data.experimental.AUTOTUNE)
+
+
+def vis_source(source: ModelnetSource, split='train'):
+    import trimesh
+    dataset = source.get_dataset(split)
+    for coords, label in dataset:
+        coords = coords.numpy()
+        pc = trimesh.PointCloud(coords)
+        print(label.numpy())
+        print(tf.reduce_max(tf.linalg.norm(coords, axis=-1)).numpy())
+        pc.show()
+
+
+if __name__ == '__main__':
+    import functools
+    from pcn.augment import augment
+    train_map_fn = functools.partial(augment, up_dim=1, rotate_scheme='random')
+    source = ModelnetSource(train_map_fn, train_map_fn)
+    vis_source(source)

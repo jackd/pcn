@@ -6,8 +6,12 @@ build_fn = @pcn.builders.resnet
 pcn.builders.resnet.filters0 = %filters0
 pcn.builders.resnet.num_levels = %num_levels
 pcn.builders.resnet.bucket_size = %bucket_size
+pcn.builders.resnet.ip0 = %ip0
+pcn.builders.resnet.coords_as_inputs = %coords_as_inputs
+coords_as_inputs = False
 
 bucket_size = False
+ip0 = False
 
 filters0 = 32
 num_levels = 3

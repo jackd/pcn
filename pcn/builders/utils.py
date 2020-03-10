@@ -19,12 +19,22 @@ def hat_weight(dists):
 
 
 @gin.configurable(module='pcn.builders')
-def simple_mlp(features, num_classes, units=(256,), dropout_rate=0.5):
-    features = layers.Dropout(dropout_rate)(features)
+def simple_mlp(features,
+               num_classes,
+               activate_first=True,
+               units=(256,),
+               dropout_rate=0.5):
+
+    def activate(x):
+        x = tf.keras.layers.Activation('relu')(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(dropout_rate)(x)
+        return x
+
+    if activate_first:
+        features = activate(features)
     for u in units:
         features = layers.Dense(u)(features)
-        features = tf.keras.layers.Activation('relu')(features)
-        features = layers.BatchNormalization()(features)
-        features = layers.Dropout(dropout_rate)(features)
+        features = activate(features)
     logits = layers.Dense(num_classes, name='logits')(features)
     return logits

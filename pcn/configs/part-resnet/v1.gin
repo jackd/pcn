@@ -1,0 +1,6 @@
+import pcn.sources.part
+
+resnet_segmentation.r0 = 0.05
+resnet_segmentation.num_levels = 4
+
+pcn.single_problem_id.subvariant = 'v1'

@@ -1,0 +1,4 @@
+include 'default.gin'
+pcn.builders.resnet.bottleneck = False
+
+variant_id = 'no-bottleneck'

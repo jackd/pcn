@@ -39,6 +39,8 @@ kb.framework.cache_managers.validation_impl = @TFRecordsCacheManager
 cache/kb.path.model_dir.run = None
 cache/kb.path.model_dir.variant_id = 'cache'
 
+shuffle_buffer = 1024
+
 model_id = 'default_model'
 variant_id = 'default_variant'
 run = 0

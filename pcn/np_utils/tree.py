@@ -1,8 +1,9 @@
+from typing import Optional
 import numpy as np
 from numba import njit
-from numba import prange
 from numba_neighbors import binary_tree as bt
 from numba_neighbors.kd_tree import KDTree3
+from pykdtree.kdtree import KDTree as pyKDTree  # pylint: disable=no-name-in-module
 
 
 @njit()
@@ -20,29 +21,38 @@ def flat_ragged_values(values, lengths):
 
 
 @njit(parallel=bt.PARALLEL, fastmath=True)
-def ragged_in_place_and_down_sample_query(coords: np.ndarray,
-                                          in_place_radius: float,
-                                          in_place_k: int,
-                                          down_sample_radius: float,
-                                          down_sample_k: int,
-                                          max_sample_size: int = -1,
-                                          leaf_size: int = 16):
-    if max_sample_size == -1:
-        max_sample_size = coords.shape[0]
+def ragged_in_place_and_down_sample_query(
+        coords: np.ndarray,
+        in_place_radius: float,
+        down_sample_radius: float,
+        rejection_radius: Optional[float] = None,
+        in_place_k: Optional[int] = None,
+        down_sample_k: Optional[int] = None,
+        max_sample_size: Optional[int] = None,
+        leaf_size: int = 16):
     in_tree = KDTree3(coords, leaf_size)
     start_nodes = in_tree.get_node_indices()
-    _, ip_indices, ip_counts = in_tree.query_radius_bottom_up(
-        coords, in_place_radius, start_nodes, in_place_k)
+    dists, ip_indices, ip_counts = in_tree.query_radius_bottom_up(
+        coords, in_place_radius, start_nodes,
+        coords.shape[0] if in_place_k is None else in_place_k)
+
+    if rejection_radius is None:
+        valid = None
+    else:
+        valid = dists < rejection_radius
 
     sample_indices, sample_size = bt.rejection_sample_precomputed(
-        ip_indices, ip_counts, max_sample_size)
+        ip_indices,
+        ip_counts,
+        coords.shape[0] if max_sample_size is None else max_sample_size,
+        valid=valid)
 
     sample_indices = sample_indices[:sample_size]
 
     out_coords = coords[sample_indices]
     _, ds_indices, ds_counts = in_tree.query_radius_bottom_up(
         out_coords, down_sample_radius, start_nodes[sample_indices],
-        down_sample_k)
+        out_coords.shape[0] if down_sample_k is None else down_sample_k)
 
     ip_indices = flat_ragged_values(ip_indices, ip_counts)
     ds_indices = flat_ragged_values(ds_indices, ds_counts)
@@ -59,11 +69,59 @@ def ragged_in_place_and_down_sample_query(coords: np.ndarray,
 @njit(fastmath=True)
 def ragged_in_place_query(coords: np.ndarray,
                           radius: float,
-                          k: int,
+                          k: Optional[int] = None,
                           leaf_size: int = 16):
     tree = KDTree3(coords, leaf_size=leaf_size)
-    r = tree.query_radius_bottom_up(coords, radius, tree.get_node_indices(), k)
+    r = tree.query_radius_bottom_up(coords, radius, tree.get_node_indices(),
+                                    coords.shape[0] if k is None else k)
     indices = r.indices
     counts = r.counts
     indices = flat_ragged_values(indices, counts)
     return (indices, counts)
+
+
+@njit(fastmath=True)
+def ragged_down_sample_query(coords,
+                             rejection_radius: float,
+                             query_radius: float,
+                             k: Optional[int] = None,
+                             max_sample_size: Optional[int] = None,
+                             leaf_size: int = 16):
+    tree = KDTree3(coords, leaf_size=leaf_size)
+    sample_result, query_result = tree.rejection_sample_query(
+        rejection_radius**2,
+        query_radius**2,
+        tree.get_node_indices(),
+        max_counts=coords.shape[0] if k is None else k,
+        max_samples=coords.shape[0]
+        if max_sample_size is None else max_sample_size)
+
+    sample_count = sample_result.count
+    sample_indices = sample_result.indices[:sample_count]
+    query_counts = query_result.counts[:sample_count]
+    query_indices = flat_ragged_values(query_result.indices[:sample_count],
+                                       query_counts)
+    return sample_indices, query_indices, query_counts
+
+
+def knn_query(in_coords, out_coords, k: int):
+    tree = pyKDTree(in_coords)
+    dists, indices = tree.query(out_coords, k)
+    return dists, indices
+    # return np.reshape(indices, (-1)), np.full((out_coords.shape[0],), k)
+
+
+@njit()
+def ifp_sample_precomputed(dists,
+                           query_indices,
+                           counts,
+                           sample_size: int,
+                           eps=1e-8):
+    result = bt.ifp_sample_precomputed(
+        dists=dists,
+        query_indices=query_indices,
+        counts=counts,
+        sample_size=sample_size,
+        eps=eps,
+    )
+    return result.indices

@@ -1,0 +1,28 @@
+import pcn.sources.part
+include '../misc/aug.gin'
+
+compiler = @pcn.compile_shapenet_part
+pcn.compile_shapenet_part.optimizer = %optimizer
+
+augment_segmentation.up_dim = 1
+augment_segmentation.shuffle = True
+
+train/augment_segmentation.jitter_stddev = 0.01
+train/augment_segmentation.jitter_clip = 0.02
+train/augment_segmentation.angle_stddev = 0.06
+train/augment_segmentation.angle_clip = 0.18
+train/augment_segmentation.uniform_scale_range = (0.8, 1.25)
+train/augment_segmentation.shuffle = True
+train/augment_segmentation.rotate_scheme = 'random'
+train/augment_segmentation.drop_prob_limits = (0, 0.875)
+
+ShapenetPartSource.train_map_fn = @train/augment_segmentation
+ShapenetPartSource.validation_map_fn = @validation/augment_segmentation
+
+base_source = @pcn.sources.ShapenetPartSource()
+
+cache_repeats = 8
+
+monitor = '_per-class-miou'
+
+problem_id = 'part'

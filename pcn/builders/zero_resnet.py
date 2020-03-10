@@ -19,8 +19,7 @@ SQRT_2 = np.sqrt(2)
 def conv_block(features: FloatTensor, sample_indices: IntTensor, filters: int,
                ds_neigh: comp.Neighborhood, dropout_rate: Optional[float],
                name: str):
-    features = tf.gather(features, sample_indices)
-
+    shortcut = tf.gather(features, sample_indices)
     branch = layers.Dense(filters // 4, name=f'{name}-branch-d0')(features)
     branch = tf.keras.layers.Activation('relu')(branch)
     branch = ds_neigh.convolve(branch, filters // 4, activation='relu')
@@ -30,9 +29,11 @@ def conv_block(features: FloatTensor, sample_indices: IntTensor, filters: int,
         branch = layers.Dropout(dropout_rate)(branch)
     branch = ZeroInit(name=f'{name}-zero')(branch)
 
-    features = layers.Dense(filters, name=f'{name}-short-d0')(features)
+    shortcut = layers.Dense(filters, name=f'{name}-short-d0')(shortcut)
+    if dropout_rate is not None:
+        shortcut = layers.Dropout(dropout_rate)(shortcut)
 
-    features = tf.keras.layers.Add(name=f'{name}-add')([features, branch])
+    features = tf.keras.layers.Add(name=f'{name}-add')([shortcut, branch])
     features = tf.keras.layers.Activation('relu')(features)
 
     return features
@@ -40,6 +41,7 @@ def conv_block(features: FloatTensor, sample_indices: IntTensor, filters: int,
 
 def identity_block(features: tf.Tensor, ip_neigh: comp.Neighborhood,
                    dropout_rate: Optional[float], name: str):
+    shortcut = features
     filters = features.shape[-1]
     assert (ip_neigh.in_cloud is ip_neigh.out_cloud)
 
@@ -52,7 +54,7 @@ def identity_block(features: tf.Tensor, ip_neigh: comp.Neighborhood,
         branch = layers.Dropout(dropout_rate)(branch)
     branch = ZeroInit(name=f'{name}-zero')(branch)
 
-    features = tf.keras.layers.Add(name=f'{name}-add')([features, branch])
+    features = tf.keras.layers.Add(name=f'{name}-add')([shortcut, branch])
     features = tf.keras.layers.Activation('relu')(features)
     return features
 
@@ -144,9 +146,7 @@ def zero_resnet(
     features = tf.math.unsorted_segment_max(
         features, out_cloud.model_structure.value_rowids,
         out_cloud.model_structure.nrows)
-    features = layers.BatchNormalization()(features)
-    features = layers.Dropout(dropout_rate)(features)
-    logits = mlp(features, num_classes=num_classes)
+    logits = mlp(features, num_classes=num_classes, activate_first=True)
 
     labels = mg.batch(mg.cache(labels))
     if weights is None:

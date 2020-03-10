@@ -1,4 +1,4 @@
-import pcn.sources
+import pcn.sources.modelnet
 import shape_tfds.shape.modelnet.pointnet2
 include '../misc/aug.gin'
 
@@ -22,5 +22,6 @@ ModelnetSource.validation_map_fn = @validation/pcn.augment
 
 base_source = @pcn.sources.ModelnetSource()
 
+cache_repeats = 32
+
 problem_id = 'pn2'
-cache_repeats = 16

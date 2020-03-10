@@ -1,6 +1,6 @@
 include '../base.gin'
-include '../sources/pn2.gin'
-include '../builders/resnet.gin'
+include '../sources/part.gin'
+include '../builders/resnet-seg.gin'
 include '../misc/rlrp.gin'
 
 batch_size = 128

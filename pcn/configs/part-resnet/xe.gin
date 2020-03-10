@@ -1,0 +1,7 @@
+import kblocks.keras.losses
+import 'default.gin'
+
+pcn.compile_shapenet_part.loss = @tf.keras.losses.SparseCategoricalCrossentropy()
+tf.keras.losses.SparseCategoricalCrossentropy.from_logits = True
+
+variant_id = 'xe'

@@ -1,0 +1,17 @@
+include '../misc/l2-reg.gin'
+import pcn.builders.resnet
+
+build_fn = @pcn.builders.resnet_segmentation
+
+pcn.builders.resnet_segmentation.filters0 = %filters0
+pcn.builders.resnet_segmentation.num_levels = %num_levels
+pcn.builders.resnet_segmentation.bucket_size = %bucket_size
+pcn.builders.resnet_segmentation.coords_as_inputs = %coords_as_inputs
+coords_as_inputs = False
+
+bucket_size = False
+
+filters0 = 32
+num_levels = 3
+
+model_id = 'resnet-seg'
