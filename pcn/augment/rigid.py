@@ -1,4 +1,5 @@
 from typing import Optional, Tuple, Union
+
 import numpy as np
 import tensorflow as tf
 
@@ -42,7 +43,7 @@ def from_axis_angle(axis: tf.Tensor, angle: tf.Tensor, name=None) -> tf.Tensor:
     Raises:
       ValueError: If the shape of `axis` or `angle` is not supported.
     """
-    with tf.name_scope(name or 'rotation_matrix_3d_from_axis_angle'):
+    with tf.name_scope(name or "rotation_matrix_3d_from_axis_angle"):
         axis = tf.convert_to_tensor(value=axis)
         angle = tf.convert_to_tensor(value=angle)
 
@@ -76,8 +77,8 @@ def from_axis_angle(axis: tf.Tensor, angle: tf.Tensor, name=None) -> tf.Tensor:
         diag = cos1_axis * axis + cos_angle
         diag_x, diag_y, diag_z = tf.unstack(diag, axis=-1)
         matrix = tf.stack(
-            (diag_x, m01, m02, m10, diag_y, m12, m20, m21, diag_z),
-            axis=-1)  # pyformat: disable
+            (diag_x, m01, m02, m10, diag_y, m12, m20, m21, diag_z), axis=-1
+        )  # pyformat: disable
         output_shape = tf.concat((tf.shape(input=axis)[:-1], (3, 3)), axis=-1)
         return tf.reshape(matrix, shape=output_shape)
 
@@ -91,8 +92,7 @@ def _pack_rotation_matrix(c, s, rotation_dim=2):
     elif rotation_dim == 2:
         return [c, -s, 0, s, c, 0, 0, 0, 1]
     else:
-        raise ValueError(
-            'rotation_dim must be 0, 1 or 2, got {}'.format(rotation_dim))
+        raise ValueError("rotation_dim must be 0, 1 or 2, got {}".format(rotation_dim))
 
 
 def _rotate(positions, normals=None, angle=None, rotation_dim=2, impl=tf):
@@ -117,13 +117,13 @@ def _rotate(positions, normals=None, angle=None, rotation_dim=2, impl=tf):
         angle = tf.random.uniform((), dtype=dtype) * (2 * np.pi)
 
     if normals is not None:
-        assert (normals.dtype == dtype)
+        assert normals.dtype == dtype
     c = impl.cos(angle)
     s = impl.sin(angle)
     # multiply on right, use non-standard rotation matrix (-s and s swapped)
     rotation_matrix = impl.reshape(
-        impl.stack(_pack_rotation_matrix(c, s, rotation_dim=rotation_dim)),
-        (3, 3))
+        impl.stack(_pack_rotation_matrix(c, s, rotation_dim=rotation_dim)), (3, 3)
+    )
 
     positions = impl.matmul(positions, rotation_matrix)
     if normals is not None:
@@ -131,25 +131,21 @@ def _rotate(positions, normals=None, angle=None, rotation_dim=2, impl=tf):
     return positions, normals
 
 
-def rotate(positions: tf.Tensor,
-           normals: Optional[tf.Tensor] = None,
-           angle=None,
-           rotation_dim=2) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+def rotate(
+    positions: tf.Tensor,
+    normals: Optional[tf.Tensor] = None,
+    angle=None,
+    rotation_dim=2,
+) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
     if isinstance(angle, tf.Tensor) or angle != 0:
-        positions, normals = _rotate(positions,
-                                     normals,
-                                     angle,
-                                     rotation_dim=rotation_dim,
-                                     impl=tf)
+        positions, normals = _rotate(
+            positions, normals, angle, rotation_dim=rotation_dim, impl=tf
+        )
     return positions, normals
 
 
 def rotate_np(positions, normals=None, angle=None, rotation_dim=2):
-    return _rotate(positions,
-                   normals,
-                   angle,
-                   rotation_dim=rotation_dim,
-                   impl=np)
+    return _rotate(positions, normals, angle, rotation_dim=rotation_dim, impl=np)
 
 
 def reflect(xyz: tf.Tensor, dim: int = 0, axis: int = -1) -> tf.Tensor:
@@ -161,33 +157,35 @@ def reflect(xyz: tf.Tensor, dim: int = 0, axis: int = -1) -> tf.Tensor:
 def random_rigid_transform_matrix(stddev=0.02, clip=None, dim=3) -> tf.Tensor:
     offset = tf.random.normal(shape=(dim, dim), stddev=stddev)
     if clip:
-        offset = tf.clip_by_value(offset, -clip, clip)  # pylint: disable=invalid-unary-operand-type
+        offset = tf.clip_by_value(
+            offset, -clip, clip
+        )  # pylint: disable=invalid-unary-operand-type
     return tf.eye(dim) + offset
 
 
-def rotate_by_scheme(positions, normals=None,
-                     scheme='random') -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+def rotate_by_scheme(
+    positions, normals=None, scheme="random"
+) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
     """scheme should be in ("random", "pca-xy", "none")."""
-    if scheme == 'none':
+    if scheme == "none":
         return positions, normals
 
-    if scheme == 'pca-xy':
+    if scheme == "pca-xy":
         angle = get_pca_xy_angle(positions)
-    elif scheme == 'random':
+    elif scheme == "random":
         angle = tf.random.uniform(shape=(), dtype=positions.dtype) * (2 * np.pi)
     else:
         raise ValueError('Unrecognized scheme "%s"' % scheme)
     return rotate(positions, normals, angle)
 
 
-def random_rigid_transform(positions: tf.Tensor,
-                           normals: Optional[tf.Tensor] = None,
-                           stddev=0.02,
-                           clip=None) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+def random_rigid_transform(
+    positions: tf.Tensor, normals: Optional[tf.Tensor] = None, stddev=0.02, clip=None
+) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
     transform = random_rigid_transform_matrix(stddev, clip, positions.shape[-1])
     positions = tf.matmul(positions, transform)
     if normals is not None:
-        raise NotImplementedError('Normal rigid transform not implemented')
+        raise NotImplementedError("Normal rigid transform not implemented")
     return positions, normals
 
 
@@ -196,32 +194,33 @@ def _maybe_reflect(positions, axis=-1, dim=0, prob=0.5):
     return tf.cond(
         should_reflect,
         lambda: tuple(reflect(p, dim=dim, axis=axis) for p in positions),
-        lambda: tuple(positions))
+        lambda: tuple(positions),
+    )
 
 
-def maybe_reflect(positions, normals=None,
-                  **kwargs) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+def maybe_reflect(
+    positions, normals=None, **kwargs
+) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
     if normals is None:
         return _maybe_reflect((positions,), **kwargs)[0], normals
     else:
         return _maybe_reflect((positions, normals), **kwargs)
 
 
-def random_scale(positions: tf.Tensor, stddev=None,
-                 uniform_range=None) -> tf.Tensor:
+def random_scale(positions: tf.Tensor, stddev=None, uniform_range=None) -> tf.Tensor:
     if stddev is not None:
         scale = tf.random.truncated_normal(shape=(), mean=1.0, stddev=stddev)
     elif uniform_range is not None:
         minval, maxval = uniform_range
         scale = tf.random.uniform(shape=(), minval=minval, maxval=maxval)
     else:
-        raise NotImplementedError(
-            'One of stddev or uniform_range must be defined')
+        raise NotImplementedError("One of stddev or uniform_range must be defined")
     return positions * scale
 
 
-def random_rotation_matrix(batch_shape=(), angle_stddev=0.06,
-                           angle_clip=0.18) -> tf.Tensor:
+def random_rotation_matrix(
+    batch_shape=(), angle_stddev=0.06, angle_clip=0.18
+) -> tf.Tensor:
     # slightly different to the one used in pointnet2
     # we use from_axis_angle rather than from_euler_angles
     # from tensorflow_graphics.geometry.transformation.rotation_matrix_3d \
@@ -235,11 +234,12 @@ def random_rotation_matrix(batch_shape=(), angle_stddev=0.06,
     return from_axis_angle(axis, angle)
 
 
-def random_rotation(positions: tf.Tensor,
-                    normals: Optional[tf.Tensor] = None,
-                    angle_stddev: Union[tf.Tensor, float] = 0.06,
-                    angle_clip: Union[tf.Tensor, float] = 0.18
-                   ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+def random_rotation(
+    positions: tf.Tensor,
+    normals: Optional[tf.Tensor] = None,
+    angle_stddev: Union[tf.Tensor, float] = 0.06,
+    angle_clip: Union[tf.Tensor, float] = 0.18,
+) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
     batch_shape = positions.shape[:-2].as_list()
     matrix = random_rotation_matrix(batch_shape, angle_stddev, angle_clip)
     positions = tf.matmul(positions, matrix)

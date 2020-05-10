@@ -1,3 +1,3 @@
 from .modelnet import ModelnetSource
 
-__all__ = ['ModelnetSource']
+__all__ = ["ModelnetSource"]

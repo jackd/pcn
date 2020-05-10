@@ -1,13 +1,16 @@
 import functools
-from typing import Optional, Any, Tuple
+from typing import Any, Optional, Tuple
+
 import tensorflow as tf
-from kblocks import multi_graph as mg
+
 # from kblocks.utils import memoized_property
 import kblocks.extras.layers.ragged as ragged_layers
 import kblocks.extras.layers.shape as shape_layers
+import pcn.ops.utils as utils_ops
+from kblocks import multi_graph as mg
+
 from .layers import conv as conv_layers
 from .layers import tree as tree_layers
-import pcn.ops.utils as utils_ops
 
 IntTensor = tf.Tensor
 FloatTensor = tf.Tensor
@@ -19,7 +22,7 @@ Lambda = tf.keras.layers.Lambda
 def tf_stack(values, axis=0, name=None):
     # fixed duplicate name in graph issues.
     if name is None:
-        name = values[0].graph.unique_name('stack')
+        name = values[0].graph.unique_name("stack")
     return tf.stack(values, axis=axis, name=name)
 
 
@@ -42,7 +45,6 @@ class memoized_property(property):  # pylint: disable=invalid-name
 
 
 class RaggedStructure(object):
-
     def __init__(self, row_splits):
         self._row_splits = row_splits
 
@@ -81,12 +83,11 @@ class RaggedStructure(object):
     @staticmethod
     def from_ragged(rt: tf.RaggedTensor):
         if rt.ragged_rank != 1:
-            raise NotImplementedError('TODO')
+            raise NotImplementedError("TODO")
         return RaggedStructure(ragged_layers.row_splits(rt))
 
 
 class Cloud(object):
-
     def __init__(self, coords: FloatTensor, bucket_size: bool = False):
         self._bucket_size = bucket_size
         self._coords = coords
@@ -108,16 +109,19 @@ class Cloud(object):
             return values
 
     def _model(self, batched_values: tf.RaggedTensor):
-        assert (isinstance(batched_values, tf.RaggedTensor))
+        assert isinstance(batched_values, tf.RaggedTensor)
         mg.assert_is_post_batch(batched_values)
         if self._bucket_size:
             with mg.post_batch_context():
                 valid_size = shape_layers.dimension(
-                    ragged_layers.values(batched_values), 0)
+                    ragged_layers.values(batched_values), 0
+                )
                 valid_size = tf.expand_dims(
-                    valid_size, axis=0)  # so it can be a keras input
-                batched_values = Lambda(
-                    utils_ops.pad_ragged_to_nearest_power)(batched_values)
+                    valid_size, axis=0
+                )  # so it can be a keras input
+                batched_values = Lambda(utils_ops.pad_ragged_to_nearest_power)(
+                    batched_values
+                )
             valid_size = mg.model_input(valid_size)
             self._valid_size = tf.squeeze(valid_size, axis=0)
         else:
@@ -148,10 +152,10 @@ class Cloud(object):
         if self.valid_size is None:
             return features
         mg.assert_is_model_tensor(features)
-        mask = tf.sequence_mask(self.valid_size,
-                                self.model_structure.total_size)
-        return tf.where(tf.expand_dims(mask, axis=-1), features,
-                        tf.zeros_like(features))
+        mask = tf.sequence_mask(self.valid_size, self.model_structure.total_size)
+        return tf.where(
+            tf.expand_dims(mask, axis=-1), features, tf.zeros_like(features)
+        )
 
     @property
     def coords(self) -> FloatTensor:
@@ -177,16 +181,17 @@ class Cloud(object):
     def bucket_size(self) -> bool:
         return self._bucket_size
 
-    def down_sample_query(self,
-                          rejection_radius: float,
-                          down_sample_radius: float,
-                          edge_features_fn,
-                          weight_fn,
-                          down_sample_k=None,
-                          max_sample_size=None,
-                          normalize=True,
-                          leaf_size=16
-                         ) -> Tuple['SampledCloud', 'Neighborhood']:
+    def down_sample_query(
+        self,
+        rejection_radius: float,
+        down_sample_radius: float,
+        edge_features_fn,
+        weight_fn,
+        down_sample_k=None,
+        max_sample_size=None,
+        normalize=True,
+        leaf_size=16,
+    ) -> Tuple["SampledCloud", "Neighborhood"]:
         with mg.pre_cache_context():
             sample_indices, ds_indices = tree_layers.ragged_down_sample_query(
                 self.coords,
@@ -194,34 +199,39 @@ class Cloud(object):
                 down_sample_radius,
                 k=down_sample_k,
                 max_sample_size=max_sample_size,
-                leaf_size=leaf_size)
-        out_cloud = SampledCloud(self,
-                                 sample_indices,
-                                 bucket_size=self.bucket_size)
-        ds_neigh = neighborhood(self,
-                                out_cloud,
-                                down_sample_radius,
-                                ds_indices,
-                                edge_features_fn,
-                                weight_fn,
-                                normalize=normalize)
+                leaf_size=leaf_size,
+            )
+        out_cloud = SampledCloud(self, sample_indices, bucket_size=self.bucket_size)
+        ds_neigh = neighborhood(
+            self,
+            out_cloud,
+            down_sample_radius,
+            ds_indices,
+            edge_features_fn,
+            weight_fn,
+            normalize=normalize,
+        )
         return out_cloud, ds_neigh
 
     def sample_query(
-            self,
-            in_place_radius,
-            down_sample_radius,
-            edge_features_fn,
-            weight_fn,
-            rejection_radius=None,
-            in_place_k=None,
-            down_sample_k=None,
-            normalize=True,
-            max_sample_size=None,
-            leaf_size=16,
-    ) -> Tuple['SampledCloud', 'Neighborhood', 'Neighborhood']:
+        self,
+        in_place_radius,
+        down_sample_radius,
+        edge_features_fn,
+        weight_fn,
+        rejection_radius=None,
+        in_place_k=None,
+        down_sample_k=None,
+        normalize=True,
+        max_sample_size=None,
+        leaf_size=16,
+    ) -> Tuple["SampledCloud", "Neighborhood", "Neighborhood"]:
         with mg.pre_cache_context():
-            ip_indices, sample_indices, ds_indices = tree_layers.ragged_in_place_and_down_sample_query(
+            (
+                ip_indices,
+                sample_indices,
+                ds_indices,
+            ) = tree_layers.ragged_in_place_and_down_sample_query(
                 self.coords,
                 in_place_radius=in_place_radius,
                 in_place_k=in_place_k,
@@ -231,64 +241,58 @@ class Cloud(object):
                 max_sample_size=max_sample_size,
                 leaf_size=leaf_size,
             )
-        out_cloud = SampledCloud(self,
-                                 sample_indices,
-                                 bucket_size=self.bucket_size)
-        ip_neigh = neighborhood(self,
-                                self,
-                                in_place_radius,
-                                ip_indices,
-                                edge_features_fn,
-                                weight_fn,
-                                normalize=normalize)
-        ds_neigh = neighborhood(self,
-                                out_cloud,
-                                down_sample_radius,
-                                ds_indices,
-                                edge_features_fn,
-                                weight_fn,
-                                normalize=normalize)
+        out_cloud = SampledCloud(self, sample_indices, bucket_size=self.bucket_size)
+        ip_neigh = neighborhood(
+            self,
+            self,
+            in_place_radius,
+            ip_indices,
+            edge_features_fn,
+            weight_fn,
+            normalize=normalize,
+        )
+        ds_neigh = neighborhood(
+            self,
+            out_cloud,
+            down_sample_radius,
+            ds_indices,
+            edge_features_fn,
+            weight_fn,
+            normalize=normalize,
+        )
         return out_cloud, ip_neigh, ds_neigh
 
-    def query(self,
-              radius,
-              edge_features_fn,
-              weight_fn,
-              k=None,
-              normalize=True,
-              leaf_size=16):
+    def query(
+        self, radius, edge_features_fn, weight_fn, k=None, normalize=True, leaf_size=16
+    ):
         with mg.pre_cache_context():
-            indices = tree_layers.ragged_in_place_query(self.coords,
-                                                        radius,
-                                                        k,
-                                                        leaf_size=leaf_size)
-        return neighborhood(self,
-                            self,
-                            radius,
-                            indices,
-                            edge_features_fn,
-                            weight_fn,
-                            normalize=normalize)
+            indices = tree_layers.ragged_in_place_query(
+                self.coords, radius, k, leaf_size=leaf_size
+            )
+        return neighborhood(
+            self,
+            self,
+            radius,
+            indices,
+            edge_features_fn,
+            weight_fn,
+            normalize=normalize,
+        )
 
 
 class SampledCloud(Cloud):
-
-    def __init__(self,
-                 in_cloud: Cloud,
-                 indices: IntTensor,
-                 bucket_size: bool = False):
+    def __init__(self, in_cloud: Cloud, indices: IntTensor, bucket_size: bool = False):
         mg.assert_is_pre_cache(indices)
         self._in_cloud = in_cloud
         self._indices = indices
         self._bucket_size = bucket_size
         batched_indices = self._batch(indices)
         with mg.post_batch_context():
-            self._batched_indices = ragged_layers.values(
-                batched_indices) + tf.gather(
-                    self.in_cloud.batched_structure.row_starts,
-                    self.batched_structure.value_rowids)
-            batched_indices = self.batched_structure.as_ragged(
-                self._batched_indices)
+            self._batched_indices = ragged_layers.values(batched_indices) + tf.gather(
+                self.in_cloud.batched_structure.row_starts,
+                self.batched_structure.value_rowids,
+            )
+            batched_indices = self.batched_structure.as_ragged(self._batched_indices)
         model_indices = self._model(batched_indices)
         self._model_indices = ragged_layers.values(model_indices)
 
@@ -325,7 +329,7 @@ class SampledCloud(Cloud):
 
 def _ragged_to_block_sparse(args):
     ragged_indices, offset = args
-    assert (ragged_indices.ragged_rank == 2)
+    assert ragged_indices.ragged_rank == 2
     b = ragged_indices.value_rowids()
     ragged_indices = ragged_indices.values
     i = ragged_indices.value_rowids()
@@ -339,36 +343,31 @@ def ragged_to_block_sparse(ragged_indices, offset):
     return Lambda(_ragged_to_block_sparse)([ragged_indices, offset])
 
 
-def neighborhood(in_cloud,
-                 out_cloud,
-                 radius,
-                 indices,
-                 edge_features_fn,
-                 weight_fn,
-                 normalize=True):
+def neighborhood(
+    in_cloud, out_cloud, radius, indices, edge_features_fn, weight_fn, normalize=True
+):
     mg.assert_is_pre_cache(indices)
     batched_indices = mg.batch(mg.cache(indices))
     with mg.post_batch_context():
-        i, j = ragged_to_block_sparse(batched_indices,
-                                      in_cloud.batched_structure.row_starts)
+        i, j = ragged_to_block_sparse(
+            batched_indices, in_cloud.batched_structure.row_starts
+        )
     i = mg.model_input(i)
     j = mg.model_input(j)
     sparse_indices = tf_stack((i, j), axis=-1)
-    rel_coords = (tf.gather(in_cloud.model_coords / radius, j) -
-                  tf.gather(out_cloud.model_coords / radius, i))
+    rel_coords = tf.gather(in_cloud.model_coords / radius, j) - tf.gather(
+        out_cloud.model_coords / radius, i
+    )
     edge_features = edge_features_fn(rel_coords)
-    assert (edge_features.shape[0] is not None)
+    assert edge_features.shape[0] is not None
     dists = tf.linalg.norm(rel_coords, axis=-1)
     if weight_fn is None:
         weights = None
     else:
         weights = weight_fn(dists)
-    return Neighborhood(in_cloud,
-                        out_cloud,
-                        sparse_indices,
-                        edge_features,
-                        weights,
-                        normalize=normalize)
+    return Neighborhood(
+        in_cloud, out_cloud, sparse_indices, edge_features, weights, normalize=normalize
+    )
 
 
 def _transpose(args):
@@ -383,15 +382,16 @@ def _transpose(args):
 
 
 class Neighborhood(object):
-
-    def __init__(self,
-                 in_cloud: Cloud,
-                 out_cloud: Cloud,
-                 sparse_indices: IntTensor,
-                 edge_features: FloatTensor,
-                 weights: Optional[FloatTensor],
-                 normalize: bool = True,
-                 eps=1e-4):
+    def __init__(
+        self,
+        in_cloud: Cloud,
+        out_cloud: Cloud,
+        sparse_indices: IntTensor,
+        edge_features: FloatTensor,
+        weights: Optional[FloatTensor],
+        normalize: bool = True,
+        eps=1e-4,
+    ):
         mg.assert_is_model_tensor(sparse_indices)
         mg.assert_is_model_tensor(edge_features)
         self._in_cloud = in_cloud
@@ -407,30 +407,37 @@ class Neighborhood(object):
             mg.assert_is_model_tensor(weights)
             if normalize:
                 weights = utils_ops.normalize_rows(
-                    tf.unstack(sparse_indices, axis=-1)[0], weights,
-                    out_cloud.model_structure.total_size)
+                    tf.unstack(sparse_indices, axis=-1)[0],
+                    weights,
+                    out_cloud.model_structure.total_size,
+                )
             self._normalized_edge_features = self._edge_features * tf.expand_dims(
-                weights, axis=0)
+                weights, axis=0
+            )
         self._transpose = None
 
-    def transpose(self) -> 'Neighborhood':
+    def transpose(self) -> "Neighborhood":
         if self._transpose is None:
             if self._in_cloud is self._out_cloud:
                 self._transpose = self
             else:
-                sparse_indices, edge_features, weights = Lambda(_transpose)([
-                    self._sparse_indices,
-                    self._edge_features,
-                    self._weights,
-                    self._out_cloud.model_structure.total_size,
-                    self._in_cloud.model_structure.total_size,
-                ])
-                self._transpose = Neighborhood(self.out_cloud,
-                                               self.in_cloud,
-                                               sparse_indices,
-                                               edge_features,
-                                               weights,
-                                               normalize=self._normalize)
+                sparse_indices, edge_features, weights = Lambda(_transpose)(
+                    [
+                        self._sparse_indices,
+                        self._edge_features,
+                        self._weights,
+                        self._out_cloud.model_structure.total_size,
+                        self._in_cloud.model_structure.total_size,
+                    ]
+                )
+                self._transpose = Neighborhood(
+                    self.out_cloud,
+                    self.in_cloud,
+                    sparse_indices,
+                    edge_features,
+                    weights,
+                    normalize=self._normalize,
+                )
                 self._transpose._transpose = self
         return self._transpose
 
@@ -442,11 +449,13 @@ class Neighborhood(object):
     def out_cloud(self) -> Cloud:
         return self._out_cloud
 
-    def convolve(self,
-                 node_features: Optional[FloatTensor],
-                 filters: int,
-                 activation=None,
-                 **kwargs):
+    def convolve(
+        self,
+        node_features: Optional[FloatTensor],
+        filters: int,
+        activation=None,
+        **kwargs
+    ):
         if node_features is not None:
             mg.assert_is_model_tensor(node_features)
         return conv_layers.sparse_cloud_convolution(
@@ -456,4 +465,5 @@ class Neighborhood(object):
             self._out_cloud.model_structure.total_size,
             filters=filters,
             activation=activation,
-            **kwargs)
+            **kwargs
+        )

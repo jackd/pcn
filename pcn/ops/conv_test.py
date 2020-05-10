@@ -1,14 +1,12 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
+
 from pcn.ops import conv as conv_ops
 
 
 class SparseOpsTest(tf.test.TestCase):
-
     def test_featureless(self):
         K = 5
         F_out = 3
@@ -18,8 +16,8 @@ class SparseOpsTest(tf.test.TestCase):
         N_out = 5
 
         i = [0, 0, 1, 1, 1, 2, 3, 3, 3, 4]
-        assert (len(i) == E)
-        assert (np.max(i) == N_out - 1)
+        assert len(i) == E
+        assert np.max(i) == N_out - 1
         j = np.random.randint(0, N_in, size=E)
         indices = np.stack((i, j), axis=-1)
         kernel = np.random.uniform(size=(K, F_out)).astype(np.float32)
@@ -30,10 +28,9 @@ class SparseOpsTest(tf.test.TestCase):
             for k in range(K):
                 expected[i] += kernel[k] * edge_features[k, c]
 
-        actual = conv_ops.featureless_conv(edge_features,
-                                           indices,
-                                           kernel,
-                                           out_size=N_out)
+        actual = conv_ops.featureless_conv(
+            edge_features, indices, kernel, out_size=N_out
+        )
         actual = self.evaluate(actual)
         np.testing.assert_allclose(actual, expected, atol=1e-3)
 
@@ -75,5 +72,5 @@ class SparseOpsTest(tf.test.TestCase):
     #     np.testing.assert_allclose(actual, expected, atol=1e-5)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     tf.test.main()

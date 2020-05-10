@@ -1,5 +1,6 @@
 import pcn.sources.modelnet
 import shape_tfds.shape.modelnet.pointnet2
+
 include '../misc/aug.gin'
 
 pcn.sources.ModelnetSource.builder = 'pointnet2_h5'

@@ -1,5 +1,6 @@
-from typing import Optional
 import abc
+from typing import Optional
+
 import gin
 import tensorflow as tf
 
@@ -16,24 +17,25 @@ regularizers = tf.keras.regularizers
 InputSpec = layers.InputSpec
 
 
-@gin.configurable(module='pcn.layers')
+@gin.configurable(module="pcn.layers")
 class ConvolutionBase(layers.Layer):
-
-    def __init__(self,
-                 filters: int,
-                 activation=None,
-                 use_bias: bool = True,
-                 kernel_initializer='glorot_uniform',
-                 bias_initializer='zeros',
-                 kernel_regularizer=None,
-                 bias_regularizer=None,
-                 activity_regularizer=None,
-                 kernel_constraint=None,
-                 bias_constraint=None,
-                 **kwargs):
+    def __init__(
+        self,
+        filters: int,
+        activation=None,
+        use_bias: bool = True,
+        kernel_initializer="glorot_uniform",
+        bias_initializer="zeros",
+        kernel_regularizer=None,
+        bias_regularizer=None,
+        activity_regularizer=None,
+        kernel_constraint=None,
+        bias_constraint=None,
+        **kwargs
+    ):
         super(ConvolutionBase, self).__init__(
-            activity_regularizer=regularizers.get(activity_regularizer),
-            **kwargs)
+            activity_regularizer=regularizers.get(activity_regularizer), **kwargs
+        )
         self.filters = int(filters)
         self.activation = activations.get(activation)
         self.use_bias = use_bias
@@ -48,26 +50,16 @@ class ConvolutionBase(layers.Layer):
 
     def get_config(self):
         config = {
-            'filters':
-                self.filters,
-            'activation':
-                activations.serialize(self.activation),
-            'use_bias':
-                self.use_bias,
-            'kernel_initializer':
-                initializers.serialize(self.kernel_initializer),
-            'bias_initializer':
-                initializers.serialize(self.bias_initializer),
-            'kernel_regularizer':
-                regularizers.serialize(self.kernel_regularizer),
-            'bias_regularizer':
-                regularizers.serialize(self.bias_regularizer),
-            'activity_regularizer':
-                regularizers.serialize(self.activity_regularizer),
-            'kernel_constraint':
-                constraints.serialize(self.kernel_constraint),
-            'bias_constraint':
-                constraints.serialize(self.bias_constraint)
+            "filters": self.filters,
+            "activation": activations.serialize(self.activation),
+            "use_bias": self.use_bias,
+            "kernel_initializer": initializers.serialize(self.kernel_initializer),
+            "bias_initializer": initializers.serialize(self.bias_initializer),
+            "kernel_regularizer": regularizers.serialize(self.kernel_regularizer),
+            "bias_regularizer": regularizers.serialize(self.bias_regularizer),
+            "activity_regularizer": regularizers.serialize(self.activity_regularizer),
+            "kernel_constraint": constraints.serialize(self.kernel_constraint),
+            "bias_constraint": constraints.serialize(self.bias_constraint),
         }
         base_config = super(ConvolutionBase, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
@@ -84,15 +76,14 @@ class ConvolutionBase(layers.Layer):
         return outputs
 
 
-@gin.configurable(module='pcn.layers')
+@gin.configurable(module="pcn.layers")
 class FeaturelessSparseCloudConvolution(ConvolutionBase):
-
     def __init__(self, *args, **kwargs):
         super(FeaturelessSparseCloudConvolution, self).__init__(*args, **kwargs)
         self.input_spec = [
             InputSpec(ndim=2),  # [S, E] edge features
             InputSpec(shape=(None, 2), dtype=tf.int64),  # [E, 2] sparse indices
-            InputSpec(ndim=0)
+            InputSpec(ndim=0),
         ]
 
     def build(self, input_shape):
@@ -102,23 +93,26 @@ class FeaturelessSparseCloudConvolution(ConvolutionBase):
         es = input_shape[0]
         num_edge_features = es[0]
         if num_edge_features is None:
-            raise ValueError(
-                'Dimension 0 of edge features must be statically known')
-        self.kernel = self.add_weight('kernel',
-                                      shape=[num_edge_features, self.filters],
-                                      initializer=self.kernel_initializer,
-                                      regularizer=self.kernel_regularizer,
-                                      constraint=self.kernel_constraint,
-                                      dtype=self.dtype,
-                                      trainable=True)
+            raise ValueError("Dimension 0 of edge features must be statically known")
+        self.kernel = self.add_weight(
+            "kernel",
+            shape=[num_edge_features, self.filters],
+            initializer=self.kernel_initializer,
+            regularizer=self.kernel_regularizer,
+            constraint=self.kernel_constraint,
+            dtype=self.dtype,
+            trainable=True,
+        )
         if self.use_bias:
-            self.bias = self.add_weight('bias',
-                                        shape=[self.filters],
-                                        initializer=self.bias_initializer,
-                                        regularizer=self.bias_regularizer,
-                                        constraint=self.bias_constraint,
-                                        dtype=self.dtype,
-                                        trainable=True)
+            self.bias = self.add_weight(
+                "bias",
+                shape=[self.filters],
+                initializer=self.bias_initializer,
+                regularizer=self.bias_regularizer,
+                constraint=self.bias_constraint,
+                dtype=self.dtype,
+                trainable=True,
+            )
         else:
             self.bias = None
         self.input_spec[0] = InputSpec(shape=(num_edge_features, None))
@@ -126,19 +120,20 @@ class FeaturelessSparseCloudConvolution(ConvolutionBase):
 
     def call(self, inputs):
         edge_features, sparse_indices, out_size = (
-            tf.convert_to_tensor(i) for i in inputs)
+            tf.convert_to_tensor(i) for i in inputs
+        )
 
-        outputs = conv_ops.featureless_conv(edge_features, sparse_indices,
-                                            self.kernel, out_size)
+        outputs = conv_ops.featureless_conv(
+            edge_features, sparse_indices, self.kernel, out_size
+        )
 
         return self._finalize(outputs)
 
 
-@gin.configurable(module='pcn.layers')
+@gin.configurable(module="pcn.layers")
 class SparseCloudConvolution(ConvolutionBase):
-
     def __init__(self, *args, **kwargs):
-        self.combine = kwargs.pop('combine', 'unstack')
+        self.combine = kwargs.pop("combine", "unstack")
         super(SparseCloudConvolution, self).__init__(*args, **kwargs)
         self.input_spec = [
             InputSpec(ndim=2),  # [N_in, F_in] node features
@@ -150,7 +145,7 @@ class SparseCloudConvolution(ConvolutionBase):
     def get_config(self):
         config = super(SparseCloudConvolution, self).get_config()
         # base_config['is_ordered'] = self.is_ordered
-        config['combine'] = self.combine
+        config["combine"] = self.combine
         return config
 
     def build(self, input_shape):
@@ -160,27 +155,28 @@ class SparseCloudConvolution(ConvolutionBase):
         num_node_features = ns[1]
         num_edge_features = ef[0]
         if num_edge_features is None:
-            raise ValueError(
-                'Dimension 0 of edge features must be statically known')
+            raise ValueError("Dimension 0 of edge features must be statically known")
         if num_node_features is None:
-            raise ValueError(
-                'Dimension 1 of node features must be statically known')
+            raise ValueError("Dimension 1 of node features must be statically known")
         self.kernel = self.add_weight(
-            'kernel',
+            "kernel",
             shape=[num_edge_features, num_node_features, self.filters],
             initializer=self.kernel_initializer,
             regularizer=self.kernel_regularizer,
             constraint=self.kernel_constraint,
             dtype=self.dtype,
-            trainable=True)
+            trainable=True,
+        )
         if self.use_bias:
-            self.bias = self.add_weight('bias',
-                                        shape=[self.filters],
-                                        initializer=self.bias_initializer,
-                                        regularizer=self.bias_regularizer,
-                                        constraint=self.bias_constraint,
-                                        dtype=self.dtype,
-                                        trainable=True)
+            self.bias = self.add_weight(
+                "bias",
+                shape=[self.filters],
+                initializer=self.bias_initializer,
+                regularizer=self.bias_regularizer,
+                constraint=self.bias_constraint,
+                dtype=self.dtype,
+                trainable=True,
+            )
         else:
             self.bias = None
         self.input_spec[0] = InputSpec(shape=(None, num_node_features))
@@ -189,22 +185,26 @@ class SparseCloudConvolution(ConvolutionBase):
 
     def call(self, inputs):
         node_features, edge_features, indices, out_size = inputs
-        dense_shape = (out_size, tf.shape(node_features,
-                                          out_type=out_size.dtype)[0])
-        outputs = conv_ops.sparse_conv(node_features,
-                                       edge_features,
-                                       indices,
-                                       self.kernel,
-                                       dense_shape,
-                                       combine=self.combine
-                                       # is_ordered=self.is_ordered
-                                      )
+        dense_shape = (out_size, tf.shape(node_features, out_type=out_size.dtype)[0])
+        outputs = conv_ops.sparse_conv(
+            node_features,
+            edge_features,
+            indices,
+            self.kernel,
+            dense_shape,
+            combine=self.combine
+            # is_ordered=self.is_ordered
+        )
         return self._finalize(outputs)
 
 
-def sparse_cloud_convolution(node_features: Optional[FloatTensor],
-                             edge_features: FloatTensor, indices: IntTensor,
-                             out_size: IntTensor, **kwargs):
+def sparse_cloud_convolution(
+    node_features: Optional[FloatTensor],
+    edge_features: FloatTensor,
+    indices: IntTensor,
+    out_size: IntTensor,
+    **kwargs
+):
     if node_features is None:
         layer = FeaturelessSparseCloudConvolution(**kwargs)
         return layer([edge_features, indices, out_size])
@@ -213,14 +213,13 @@ def sparse_cloud_convolution(node_features: Optional[FloatTensor],
         return layer([node_features, edge_features, indices, out_size])
 
 
-@gin.configurable(module='pcn.layers')
+@gin.configurable(module="pcn.layers")
 class FlexMaxPool(layers.Layer):
-
     def __init__(self, *args, **kwargs):
         super(FlexMaxPool, self).__init__(*args, **kwargs)
         self.input_spec = [
             InputSpec(ndim=2, dtype=self.dtype),
-            InputSpec(shape=(None, 2), dtype=tf.int64)
+            InputSpec(shape=(None, 2), dtype=tf.int64),
         ]
 
     def call(self, inputs):
@@ -228,14 +227,13 @@ class FlexMaxPool(layers.Layer):
         return conv_ops.sparse_flex_max_pool(features, sparse_indices)
 
 
-@gin.configurable(module='pcn.layers')
+@gin.configurable(module="pcn.layers")
 class FlexUpSample(layers.Layer):
-
     def __init__(self, *args, **kwargs):
         super(FlexUpSample, self).__init__(*args, **kwargs)
         self.input_spec = [
             InputSpec(ndim=2, dtype=self.dtype),
-            InputSpec(shape=(None, 2), dtype=tf.int64)
+            InputSpec(shape=(None, 2), dtype=tf.int64),
         ]
 
     def call(self, inputs):

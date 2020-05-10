@@ -1,8 +1,9 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-from pcn.components import ragged_to_block_sparse
-import matplotlib.pyplot as plt
 from scipy.sparse import coo_matrix
+
+from pcn.components import ragged_to_block_sparse
 
 
 def get_ragged_indices(n_in, n_out, num_edges):
@@ -25,8 +26,7 @@ def map_fn(values, row_splits, n_in, n_out):
     return tf.RaggedTensor.from_row_splits(values, row_splits), n_in, n_out
 
 
-dataset = tf.data.Dataset.from_generator(gen,
-                                         (tf.int64,) * 4).map(map_fn).batch(3)
+dataset = tf.data.Dataset.from_generator(gen, (tf.int64,) * 4).map(map_fn).batch(3)
 
 for rt, n_in, n_out in dataset:
     offset = tf.concat([[0], tf.math.cumsum(n_in)], axis=0)

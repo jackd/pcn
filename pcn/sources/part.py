@@ -1,37 +1,43 @@
-from typing import Sequence
 import functools
+from typing import Sequence
+
+import gin
 import numpy as np
 import tensorflow as tf
-import gin
-from kblocks.framework.sources import TfdsSource
+
 from kblocks.extras.losses.ciou import ContinuousMeanIouLoss
 from kblocks.extras.metrics.prob_mean_iou import ProbMeanIoU
+from kblocks.framework.sources import TfdsSource
 from shape_tfds.shape.shapenet import part
 
 
 def _get_logits_mask():
-    logits_mask = np.zeros((part.NUM_OBJECT_CLASSES, part.NUM_PART_CLASSES),
-                           dtype=np.bool)
+    logits_mask = np.zeros(
+        (part.NUM_OBJECT_CLASSES, part.NUM_PART_CLASSES), dtype=np.bool
+    )
     for i in range(part.NUM_OBJECT_CLASSES):
         for j in part.part_class_indices(i):
             logits_mask[i, j] = True
     return logits_mask
 
 
-def _map_fn(points_map_fn,
-            inputs,
-            object_class,
-            weights=None,
-            weighted=False,
-            return_object_class=True):
-    positions = inputs['positions']
+def _map_fn(
+    points_map_fn,
+    inputs,
+    object_class,
+    weights=None,
+    weighted=False,
+    return_object_class=True,
+):
+    positions = inputs["positions"]
     positions = positions / tf.reduce_max(tf.linalg.norm(positions, axis=-1))
-    positions, normals, labels = points_map_fn(positions, inputs['normals'],
-                                               inputs['labels'])
+    positions, normals, labels = points_map_fn(
+        positions, inputs["normals"], inputs["labels"]
+    )
 
     features = dict(positions=positions, normals=normals)
     if return_object_class:
-        features['object_class'] = object_class
+        features["object_class"] = object_class
 
     if weighted:
         class_freq = tf.constant(part.POINT_CLASS_FREQ)
@@ -42,7 +48,6 @@ def _map_fn(points_map_fn,
 
 
 class BlockProbMeanIoU(tf.keras.metrics.MeanIoU):
-
     def __init__(self, start, stop, take_argmax=True, **kwargs):
         self.start = start
         self.stop = stop
@@ -57,7 +62,8 @@ class BlockProbMeanIoU(tf.keras.metrics.MeanIoU):
         """
         for v in self.variables:
             tf.keras.backend.set_value(
-                v, np.zeros(shape=v.shape, dtype=v.dtype.as_numpy_dtype))
+                v, np.zeros(shape=v.shape, dtype=v.dtype.as_numpy_dtype)
+            )
 
     def update_state(self, y_true, y_pred, sample_weight=None):
         y_true = tf.reshape(y_true, (-1,))
@@ -68,12 +74,12 @@ class BlockProbMeanIoU(tf.keras.metrics.MeanIoU):
             sample_weight = tf.boolean_mask(sample_weight, mask)
         if self.take_argmax:
             y_pred = tf.argmax(y_pred, axis=-1)
-        return super().update_state(y_true - self.start, y_pred - self.start,
-                                    sample_weight)
+        return super().update_state(
+            y_true - self.start, y_pred - self.start, sample_weight
+        )
 
 
 class MetricMean(tf.keras.metrics.Metric):
-
     def __init__(self, metrics: Sequence[tf.keras.metrics.Metric], **kwargs):
         self.__metrics = tuple(metrics)
         super().__init__(**kwargs)
@@ -89,24 +95,26 @@ class MetricMean(tf.keras.metrics.Metric):
         return tf.reduce_mean(results)
 
 
-@gin.configurable(module='pcn')
+@gin.configurable(module="pcn")
 def compile_shapenet_part(model, optimizer, loss=None, metrics=None):
     _, names = part.load_synset_ids()
     if loss is None:
         loss = ContinuousMeanIouLoss(from_logits=True)
     if metrics is None:
         metrics = [
-            BlockProbMeanIoU(part.LABEL_SPLITS[i],
-                             part.LABEL_SPLITS[i + 1],
-                             name=f'{names[sid][0]}-miou')
+            BlockProbMeanIoU(
+                part.LABEL_SPLITS[i],
+                part.LABEL_SPLITS[i + 1],
+                name=f"{names[sid][0]}-miou",
+            )
             for i, sid in enumerate(part.PART_SYNSET_IDS)
         ]
-        metrics.append(MetricMean(tuple(metrics), name='_per-class-miou'))
-        metrics.append(tf.keras.metrics.SparseCategoricalAccuracy(name='acc'))
+        metrics.append(MetricMean(tuple(metrics), name="_per-class-miou"))
+        metrics.append(tf.keras.metrics.SparseCategoricalAccuracy(name="acc"))
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
 
-@gin.configurable(module='pcn')
+@gin.configurable(module="pcn")
 def compile_shapenet_part_single(model, optimizer, loss=None, metrics=None):
     if loss is None:
         # loss = ContinuousMeanIouLoss(from_logits=True)
@@ -114,19 +122,14 @@ def compile_shapenet_part_single(model, optimizer, loss=None, metrics=None):
     if metrics is None:
         metrics = [
             ProbMeanIoU(num_classes=model.outputs[0].shape[-1]),
-            tf.keras.metrics.SparseCategoricalAccuracy(name='acc')
+            tf.keras.metrics.SparseCategoricalAccuracy(name="acc"),
         ]
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
 
-@gin.configurable(module='pcn.sources')
+@gin.configurable(module="pcn.sources")
 class ShapenetPartSource(TfdsSource):
-
-    def __init__(self,
-                 train_map_fn,
-                 validation_map_fn,
-                 weighted=False,
-                 **kwargs):
+    def __init__(self, train_map_fn, validation_map_fn, weighted=False, **kwargs):
         builder = part.ShapenetPart2017()
         self._train_map_fn = train_map_fn
         self._validation_map_fn = validation_map_fn
@@ -136,38 +139,33 @@ class ShapenetPartSource(TfdsSource):
 
     def get_dataset(self, split) -> tf.data.Dataset:
         dataset = super().get_dataset(split)
-        coords_map_fn = (self._train_map_fn
-                         if split == 'train' else self._validation_map_fn)
-        map_fn = functools.partial(_map_fn,
-                                   coords_map_fn,
-                                   weighted=self._weighted)
+        coords_map_fn = (
+            self._train_map_fn if split == "train" else self._validation_map_fn
+        )
+        map_fn = functools.partial(_map_fn, coords_map_fn, weighted=self._weighted)
         return dataset.map(map_fn, tf.data.experimental.AUTOTUNE)
 
 
-@gin.configurable(module='pcn')
+@gin.configurable(module="pcn")
 def single_problem_id(synset, rotate=True, subvariant=None):
     if rotate:
-        out = f'part-single-{synset}'
+        out = f"part-single-{synset}"
     else:
-        out = f'part-single-no-rot-{synset}'
+        out = f"part-single-no-rot-{synset}"
     if subvariant is not None:
-        out = f'{out}-{subvariant}'
+        out = f"{out}-{subvariant}"
     return out
 
 
-@gin.configurable(module='pcn.sources')
+@gin.configurable(module="pcn.sources")
 class ShapenetPartSingleSource(TfdsSource):
-
-    def __init__(self,
-                 synset,
-                 train_map_fn,
-                 validation_map_fn,
-                 weighted=False,
-                 **kwargs):
-        builder = part.ShapenetPart2017(config=part.ShapenetPart2017Config(
-            synset=synset))
-        meta = dict(
-            num_classes=builder.info.features['cloud']['labels'].num_classes)
+    def __init__(
+        self, synset, train_map_fn, validation_map_fn, weighted=False, **kwargs
+    ):
+        builder = part.ShapenetPart2017(
+            config=part.ShapenetPart2017Config(synset=synset)
+        )
+        meta = dict(num_classes=builder.info.features["cloud"]["labels"].num_classes)
         self._train_map_fn = train_map_fn
         self._validation_map_fn = validation_map_fn
         self._weighted = weighted
@@ -175,28 +173,29 @@ class ShapenetPartSingleSource(TfdsSource):
 
     def get_dataset(self, split) -> tf.data.Dataset:
         dataset = super().get_dataset(split)
-        coords_map_fn = (self._train_map_fn
-                         if split == 'train' else self._validation_map_fn)
-        map_fn = functools.partial(_map_fn,
-                                   coords_map_fn,
-                                   weighted=self._weighted,
-                                   return_object_class=False)
+        coords_map_fn = (
+            self._train_map_fn if split == "train" else self._validation_map_fn
+        )
+        map_fn = functools.partial(
+            _map_fn, coords_map_fn, weighted=self._weighted, return_object_class=False
+        )
         return dataset.map(map_fn, tf.data.experimental.AUTOTUNE)
 
 
-def vis_source(source: TfdsSource, split='train'):
+def vis_source(source: TfdsSource, split="train"):
     # import trimesh
     from mayavi import mlab
+
     dataset = source.get_dataset(split)
     for args in dataset:
         features, labels = args[:2]
         labels = labels.numpy()
-        coords = features['positions'].numpy()
-        normals = features['normals'].numpy()
+        coords = features["positions"].numpy()
+        normals = features["normals"].numpy()
         print(np.max(np.linalg.norm(coords, axis=-1)))
 
-        print(features['object_class'].numpy())
-        mlab.points3d(*coords.T, labels, scale_mode='none', scale_factor=0.02)
+        print(features["object_class"].numpy())
+        mlab.points3d(*coords.T, labels, scale_mode="none", scale_factor=0.02)
         mlab.quiver3d(*coords.T, *normals.T, scale_factor=0.02)
         mlab.show()
 
@@ -230,14 +229,17 @@ def vis_source(source: TfdsSource, split='train'):
         # scene.show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import functools
     from pcn.augment import augment_segmentation
-    train_map_fn = functools.partial(augment_segmentation,
-                                     up_dim=1,
-                                     rotate_scheme='pca-xy',
-                                     shuffle=True,
-                                     drop_prob_limits=(0.5, 0.6),
-                                     maybe_reflect_x=True)
+
+    train_map_fn = functools.partial(
+        augment_segmentation,
+        up_dim=1,
+        rotate_scheme="pca-xy",
+        shuffle=True,
+        drop_prob_limits=(0.5, 0.6),
+        maybe_reflect_x=True,
+    )
     source = ShapenetPartSource(train_map_fn, train_map_fn)
     vis_source(source)

@@ -1,4 +1,5 @@
 import pcn.sources.part
+
 include '../misc/aug.gin'
 
 compiler = @pcn.compile_shapenet_part
