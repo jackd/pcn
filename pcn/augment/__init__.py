@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 import gin
 import tensorflow as tf
 
-from . import jitter, rigid
+from pcn.augment import jitter, rigid
 
 
 @gin.configurable(module="pcn")

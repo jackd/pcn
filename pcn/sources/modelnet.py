@@ -4,6 +4,7 @@ import gin
 import tensorflow as tf
 
 from kblocks.framework.sources import TfdsSource
+from shape_tfds.shape.modelnet.pointnet2 import Pointnet2H5
 
 
 def _map_fn(coords_map_fn, inputs, labels, weights=None):
@@ -14,18 +15,9 @@ def _map_fn(coords_map_fn, inputs, labels, weights=None):
 @gin.configurable(module="pcn.sources")
 class ModelnetSource(TfdsSource):
     def __init__(
-        self,
-        train_map_fn,
-        validation_map_fn,
-        builder=None,
-        num_points=1024,
-        return_normals=False,
-        split_map=None,
-        **kwargs
+        self, train_map_fn, validation_map_fn, builder=None, split_map=None, **kwargs
     ):
         if builder is None:
-            from shape_tfds.shape.modelnet.pointnet2 import Pointnet2H5
-
             builder = Pointnet2H5()
             if split_map is None:
                 split_map = {"validation": "test"}
@@ -43,7 +35,7 @@ class ModelnetSource(TfdsSource):
 
 
 def vis_source(source: ModelnetSource, split="train"):
-    import trimesh
+    import trimesh  # pylint:disable=import-outside-toplevel
 
     dataset = source.get_dataset(split)
     for coords, label in dataset:
@@ -55,7 +47,6 @@ def vis_source(source: ModelnetSource, split="train"):
 
 
 if __name__ == "__main__":
-    import functools
     from pcn.augment import augment
 
     train_map_fn = functools.partial(augment, up_dim=1, rotate_scheme="random")

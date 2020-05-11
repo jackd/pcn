@@ -8,9 +8,8 @@ import kblocks.extras.layers.ragged as ragged_layers
 import kblocks.extras.layers.shape as shape_layers
 import pcn.ops.utils as utils_ops
 from kblocks import multi_graph as mg
-
-from .layers import conv as conv_layers
-from .layers import tree as tree_layers
+from pcn.layers import conv as conv_layers
+from pcn.layers import tree as tree_layers
 
 IntTensor = tf.Tensor
 FloatTensor = tf.Tensor
@@ -44,7 +43,7 @@ class memoized_property(property):  # pylint: disable=invalid-name
         return cached
 
 
-class RaggedStructure(object):
+class RaggedStructure:
     def __init__(self, row_splits):
         self._row_splits = row_splits
 
@@ -87,7 +86,7 @@ class RaggedStructure(object):
         return RaggedStructure(ragged_layers.row_splits(rt))
 
 
-class Cloud(object):
+class Cloud:
     def __init__(self, coords: FloatTensor, bucket_size: bool = False):
         self._bucket_size = bucket_size
         self._coords = coords
@@ -129,20 +128,6 @@ class Cloud(object):
         model_values = mg.model_input(batched_values)
         self._model_structure = RaggedStructure.from_ragged(model_values)
         return model_values
-
-        # assert (isinstance(batched_values, tf.RaggedTensor))
-        # mg.assert_is_post_batch(batched_values)
-
-        # model_values = mg.model_input(batched_values)
-        # if self._bucket_size:
-        #     self._valid_size = shape_layers.dimension(
-        #         ragged_layers.values(model_values), 0)
-        #     model_values = Lambda(
-        #         utils_ops.pad_ragged_to_nearest_power)(model_values)
-        # else:
-        #     self._valid_size = None
-        # self._model_structure = RaggedStructure.from_ragged(model_values)
-        # return model_values
 
     @property
     def valid_size(self):
@@ -265,6 +250,7 @@ class Cloud(object):
     def query(
         self, radius, edge_features_fn, weight_fn, k=None, normalize=True, leaf_size=16
     ):
+        assert k is None or isinstance(k, int)
         with mg.pre_cache_context():
             indices = tree_layers.ragged_in_place_query(
                 self.coords, radius, k, leaf_size=leaf_size
@@ -281,7 +267,9 @@ class Cloud(object):
 
 
 class SampledCloud(Cloud):
-    def __init__(self, in_cloud: Cloud, indices: IntTensor, bucket_size: bool = False):
+    def __init__(  # pylint:disable=super-init-not-called
+        self, in_cloud: Cloud, indices: IntTensor, bucket_size: bool = False
+    ):
         mg.assert_is_pre_cache(indices)
         self._in_cloud = in_cloud
         self._indices = indices
@@ -370,18 +358,7 @@ def neighborhood(
     )
 
 
-def _transpose(args):
-    indices, edge_features, weights, out_size, in_size = args
-    values = tf.range(tf.shape(indices)[0])
-    st = tf.SparseTensor(indices, values, (out_size, in_size))
-    st = tf.sparse.reorder(tf.sparse.transpose(st, (1, 0)))
-    values = st.values
-    edge_features = tf.gather(edge_features, values, axis=1)
-    weights = tf.gather(weights, values)
-    return st.indices, edge_features, weights
-
-
-class Neighborhood(object):
+class Neighborhood:
     def __init__(
         self,
         in_cloud: Cloud,
@@ -390,7 +367,6 @@ class Neighborhood(object):
         edge_features: FloatTensor,
         weights: Optional[FloatTensor],
         normalize: bool = True,
-        eps=1e-4,
     ):
         mg.assert_is_model_tensor(sparse_indices)
         mg.assert_is_model_tensor(edge_features)
@@ -421,7 +397,18 @@ class Neighborhood(object):
             if self._in_cloud is self._out_cloud:
                 self._transpose = self
             else:
-                sparse_indices, edge_features, weights = Lambda(_transpose)(
+
+                def transpose_params(args):
+                    indices, edge_features, weights, out_size, in_size = args
+                    values = tf.range(tf.shape(indices)[0])
+                    st = tf.SparseTensor(indices, values, (out_size, in_size))
+                    st = tf.sparse.reorder(tf.sparse.transpose(st, (1, 0)))
+                    values = st.values
+                    edge_features = tf.gather(edge_features, values, axis=1)
+                    weights = tf.gather(weights, values)
+                    return st.indices, edge_features, weights
+
+                sparse_indices, edge_features, weights = Lambda(transpose_params)(
                     [
                         self._sparse_indices,
                         self._edge_features,
@@ -438,7 +425,7 @@ class Neighborhood(object):
                     weights,
                     normalize=self._normalize,
                 )
-                self._transpose._transpose = self
+                self._transpose._transpose = self  # pylint:disable=protected-access
         return self._transpose
 
     @property

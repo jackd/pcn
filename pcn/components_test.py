@@ -17,10 +17,11 @@ def ip_build(
     weight_fn=hat_weight,
     normalize=True,
 ):
+    del num_classes
     cloud = comp.Cloud(coords, bucket_size=True)
     radius = r0
     ip_neigh = cloud.query(
-        radius, k0, polynomial_edge_features, weight_fn, normalize=normalize
+        radius, polynomial_edge_features, weight_fn, k0, normalize=normalize
     )
     features = None
     features = ip_neigh.convolve(features, filters=3, activation="relu")
@@ -38,10 +39,11 @@ def ip_pool_build(
     weight_fn=hat_weight,
     normalize=True,
 ):
+    del num_classes
     cloud = comp.Cloud(coords, bucket_size=bucket_size)
     radius = r0
     ip_neigh = cloud.query(
-        radius, k0, polynomial_edge_features, weight_fn, normalize=normalize
+        radius, polynomial_edge_features, weight_fn, k0, normalize=normalize
     )
     features = None
     features = ip_neigh.convolve(features, filters=3, activation="relu")

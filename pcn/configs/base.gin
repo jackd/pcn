@@ -1,8 +1,8 @@
+import kblocks.extras.cache
+import kblocks.extras.cache.tfrecords
 import kblocks.extras.callbacks.checkpoint
-import kblocks.framework.cache
-import kblocks.framework.cache.tfrecords
 import kblocks.framework.compilers
-import kblocks.framework.pipelines
+import kblocks.framework.sources.pipelined
 import kblocks.keras.optimizers
 import kblocks.multi_graph.trainable
 import kblocks.path
@@ -16,8 +16,10 @@ kb.framework.multi_graph_trainable.batch_size = %batch_size
 kb.framework.multi_graph_trainable.compiler = %compiler
 kb.framework.multi_graph_trainable.build_with_batch_size = False
 kb.framework.multi_graph_trainable.use_model_builders = %use_model_builders
-
 kb.framework.multi_graph_trainable.model_dir = %model_dir
+
+# kb.framework.fit.profile_batch = 2  # required for tf < 2.2
+kb.framework.fit.profile_batch = (10, 20)
 
 
 model_dir = @kb.path.model_dir()
@@ -27,13 +29,16 @@ kb.path.model_dir.model_id = %model_id
 kb.path.model_dir.variant_id = %variant_id
 kb.path.model_dir.run = %run
 
-kb.framework.BasePipeline.clear_cache = %clear_cache
-kb.framework.BasePipeline.cache_managers = @kb.framework.cache_managers()
-kb.framework.BasePipeline.shuffle_buffer = %shuffle_buffer
-kb.framework.BaseCacheManager.preprocess = True
-kb.framework.cache_managers.root_dir = @cache/kb.path.model_dir()
-kb.framework.cache_managers.train_impl = @TFRecordsCacheManager
-kb.framework.cache_managers.validation_impl = @TFRecordsCacheManager
+kb.framework.PipelinedSource.clear_cache = %clear_cache
+kb.framework.PipelinedSource.cache_managers = @kb.cache.cache_managers()
+kb.framework.PipelinedSource.shuffle_buffer = %shuffle_buffer
+kb.framework.PipelinedSource.batcher = @kb.framework.RectBatcher()
+kb.framework.PipelinedSource.repeats = None
+kb.framework.RectBatcher.batch_size = %batch_size
+kb.cache.BaseCacheManager.preprocess = True
+kb.cache.cache_managers.root_dir = @cache/kb.path.model_dir()
+kb.cache.cache_managers.train_impl = @TFRecordsCacheManager
+kb.cache.cache_managers.validation_impl = @TFRecordsCacheManager
 cache/kb.path.model_dir.run = None
 cache/kb.path.model_dir.variant_id = 'cache'
 

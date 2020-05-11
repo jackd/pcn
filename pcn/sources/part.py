@@ -51,7 +51,7 @@ class BlockProbMeanIoU(tf.keras.metrics.MeanIoU):
     def __init__(self, start, stop, take_argmax=True, **kwargs):
         self.start = start
         self.stop = stop
-        self.take_argmax = True
+        self.take_argmax = take_argmax
         super().__init__(num_classes=stop - start, **kwargs)
 
     def reset_states(self):
@@ -230,7 +230,6 @@ def vis_source(source: TfdsSource, split="train"):
 
 
 if __name__ == "__main__":
-    import functools
     from pcn.augment import augment_segmentation
 
     train_map_fn = functools.partial(

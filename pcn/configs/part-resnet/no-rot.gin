@@ -1,4 +1,0 @@
-include 'default.gin'
-train/pcn.augment_segmentation.rotate_scheme = 'none'
-
-problem_id = 'part-no-rot'
