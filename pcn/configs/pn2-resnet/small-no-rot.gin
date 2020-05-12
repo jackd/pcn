@@ -1,4 +1,0 @@
-include 'small.gin'
-train/pcn.augment.rotate_scheme = 'none'
-
-problem_id = 'pn2-no-rot'

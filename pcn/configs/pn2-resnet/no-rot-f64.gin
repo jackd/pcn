@@ -1,4 +1,0 @@
-include 'no-rot.gin'
-
-pcn.builders.resnet.filters0 = 64
-variant_id = 'f64'

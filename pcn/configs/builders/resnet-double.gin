@@ -1,4 +1,0 @@
-include 'resnet.gin'
-
-pcn.builders.resnet.double_search_radius = True
-model_id = 'resnet-double'

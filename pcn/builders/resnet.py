@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Callable, Optional
 
 import gin
 import numpy as np
@@ -16,6 +16,8 @@ FloatTensor = tf.Tensor
 
 R0 = 0.1125
 SQRT_2 = np.sqrt(2)
+
+TensorMap = Callable[[tf.Tensor], tf.Tensor]
 
 
 def conv_block(
@@ -111,58 +113,23 @@ def identity_block(
     return features
 
 
-@gin.configurable(module="pcn.builders")
-def resnet(
-    coords,
-    labels,
-    weights=None,
-    num_classes=40,
-    bucket_size=False,
-    num_levels=3,
-    filters0=32,
-    edge_features_fn=polynomial_edge_features,
-    weight_fn=hat_weight,
-    k0=64,
-    r0=R0,
-    dropout_rate=0.5,
-    mlp=simple_mlp,
-    ip0=False,
-    bottleneck=True,
-    coords_as_inputs=False,
+def _resnet_body(
+    in_cloud: comp.Cloud,
+    features: FloatTensor,
+    num_classes: int,
+    num_levels: int,
+    filters0: int,
+    edge_features_fn: Callable,
+    weight_fn: Callable,
+    k0: int,
+    r0: float,
+    dropout_rate: float,
+    mlp: Callable,
+    bottleneck: bool,
 ):
-    in_cloud = comp.Cloud(coords, bucket_size=bucket_size)
-    filters = filters0
-    features = in_cloud.model_coords if coords_as_inputs else None
     radius = r0
     k1 = None if k0 is None else 2 * k0  # for down sample
-
-    out_cloud, ip_neigh, ds_neigh = in_cloud.sample_query(
-        edge_features_fn=edge_features_fn,
-        weight_fn=weight_fn,
-        in_place_radius=radius,
-        in_place_k=k0,
-        down_sample_radius=radius * SQRT_2,
-        down_sample_k=k1,
-    )
-
-    # initial in-place conv
-    features = ip_neigh.convolve(features, filters=filters)
-    features = layers.BatchNormalization(name="ip0-bn0")(features)
-    features = tf.keras.layers.Activation("relu")(features)
-
-    if ip0:
-        features = identity_block(
-            features, ip_neigh, dropout_rate, bottleneck=bottleneck, name="ip0"
-        )
-
-    # down sample
-    filters *= 2
-    features = conv_block(
-        features, out_cloud.model_indices, filters, ds_neigh, dropout_rate, name="ds0"
-    )
-
-    in_cloud = out_cloud
-
+    filters = filters0
     for i in range(1, num_levels):
         radius *= 2
 
@@ -199,15 +166,130 @@ def resnet(
     )
     features = layers.Dense(filters * 4)(features)
     features = out_cloud.mask_invalid(features)
-    features = tf.math.unsorted_segment_max(
-        features,
-        out_cloud.model_structure.value_rowids,
-        out_cloud.model_structure.nrows,
-    )
+    features = tf.math.segment_max(features, out_cloud.model_structure.value_rowids)
     logits = mlp(features, num_classes=num_classes, activate_first=True)
+    return logits
 
+
+def _finalize(logits: FloatTensor, labels: IntTensor, weights: Optional[FloatTensor]):
     labels = mg.batch(mg.cache(labels))
     if weights is None:
         return logits, labels
-    else:
-        return logits, labels, mg.batch(mg.cache(weights))
+    return logits, labels, mg.batch(mg.cache(weights))
+
+
+@gin.configurable(module="pcn.builders")
+def resnet(
+    coords: FloatTensor,
+    labels: IntTensor,
+    weights: Optional[FloatTensor] = None,
+    num_classes: int = 40,
+    bucket_size: bool = False,
+    num_levels: int = 3,
+    filters0: int = 32,
+    edge_features_fn: TensorMap = polynomial_edge_features,
+    weight_fn: TensorMap = hat_weight,
+    k0: int = 64,
+    r0: float = R0,
+    dropout_rate: float = 0.5,
+    mlp: Callable = simple_mlp,
+    bottleneck: bool = True,
+):
+    in_cloud = comp.Cloud(coords, bucket_size=bucket_size)
+    features = None
+    k1 = None if k0 is None else 2 * k0  # for down sample
+
+    out_cloud, ip_neigh, ds_neigh = in_cloud.sample_query(
+        edge_features_fn=edge_features_fn,
+        weight_fn=weight_fn,
+        in_place_radius=r0,
+        in_place_k=k0,
+        down_sample_radius=r0 * SQRT_2,
+        down_sample_k=k1,
+    )
+
+    # initial in-place conv
+    features = ip_neigh.convolve(features, filters=filters0)
+    features = layers.BatchNormalization(name="ip0-bn0")(features)
+    features = tf.keras.layers.Activation("relu")(features)
+
+    # down sample
+    features = conv_block(
+        features,
+        out_cloud.model_indices,
+        filters0 * 2,
+        ds_neigh,
+        dropout_rate,
+        name="ds0",
+    )
+
+    in_cloud = out_cloud
+    logits = _resnet_body(
+        in_cloud=in_cloud,
+        features=features,
+        num_classes=num_classes,
+        num_levels=num_levels,
+        filters0=filters0 * 2,
+        edge_features_fn=edge_features_fn,
+        weight_fn=weight_fn,
+        k0=k0,
+        r0=r0,
+        dropout_rate=dropout_rate,
+        mlp=mlp,
+        bottleneck=bottleneck,
+    )
+    return _finalize(logits, labels, weights)
+
+
+@gin.configurable(module="pcn.builders")
+def resnet_small(
+    coords: tf.Tensor,
+    labels: tf.Tensor,
+    weights: Optional[tf.Tensor] = None,
+    num_classes: int = 40,
+    bucket_size: bool = False,
+    num_levels: int = 3,
+    filters0: int = 32,
+    edge_features_fn: TensorMap = polynomial_edge_features,
+    weight_fn: TensorMap = hat_weight,
+    k0: int = 64,
+    r0: float = R0,
+    dropout_rate: float = 0.5,
+    mlp: Callable = simple_mlp,
+    bottleneck: bool = True,
+):
+    in_cloud = comp.Cloud(coords, bucket_size=bucket_size)
+    features = None
+    k1 = None if k0 is None else 2 * k0  # for down sample
+
+    out_cloud, ds_neigh = in_cloud.down_sample_query(
+        edge_features_fn=edge_features_fn,
+        weight_fn=weight_fn,
+        rejection_radius=r0,
+        down_sample_radius=r0 * SQRT_2,
+        down_sample_k=k1,
+    )
+
+    # initial down-sample conv
+    features = ds_neigh.convolve(features, filters0, activation=None)
+    features = layers.BatchNormalization(name="c0-bn1")(features)
+    if dropout_rate is not None and dropout_rate > 0:
+        features = layers.Dropout(dropout_rate)(features)
+    features = tf.keras.layers.Activation("relu")(features)
+
+    in_cloud = out_cloud
+    logits = _resnet_body(
+        in_cloud=in_cloud,
+        features=features,
+        num_classes=num_classes,
+        num_levels=num_levels,
+        filters0=filters0,
+        edge_features_fn=edge_features_fn,
+        weight_fn=weight_fn,
+        k0=k0,
+        r0=r0,
+        dropout_rate=dropout_rate,
+        mlp=mlp,
+        bottleneck=bottleneck,
+    )
+    return _finalize(logits, labels, weights)

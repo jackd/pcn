@@ -1,0 +1,4 @@
+include 'base.gin'
+
+include '../builders/resnet.gin'
+problem_id = 'large'

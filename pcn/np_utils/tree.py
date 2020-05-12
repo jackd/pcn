@@ -1,11 +1,10 @@
 from typing import Optional
 
 import numpy as np
-
 from numba import njit
+
 from numba_neighbors import binary_tree as bt
 from numba_neighbors.kd_tree import KDTree3
-from pykdtree.kdtree import KDTree as pyKDTree  # pylint: disable=no-name-in-module
 
 
 @njit()
@@ -42,16 +41,11 @@ def ragged_in_place_and_down_sample_query(
         coords.shape[0] if in_place_k is None else in_place_k,
     )
 
-    if rejection_radius is None:
-        valid = None
-    else:
-        valid = dists < rejection_radius
-
     sample_indices, sample_size = bt.rejection_sample_precomputed(
         ip_indices,
         ip_counts,
         coords.shape[0] if max_sample_size is None else max_sample_size,
-        valid=valid,
+        valid=None if rejection_radius is None else dists < rejection_radius,
     )
 
     sample_indices = sample_indices[:sample_size]
@@ -99,25 +93,47 @@ def ragged_down_sample_query(
     max_sample_size: Optional[int] = None,
     leaf_size: int = 16,
 ):
-    tree = KDTree3(coords, leaf_size=leaf_size)
-    sample_result, query_result = tree.rejection_sample_query(
-        rejection_radius ** 2,
-        query_radius ** 2,
-        tree.get_node_indices(),
-        max_counts=coords.shape[0] if k is None else k,
-        max_samples=coords.shape[0] if max_sample_size is None else max_sample_size,
+    (
+        _,
+        _,
+        sample_indices,
+        ds_indices,
+        ds_counts,
+    ) = ragged_in_place_and_down_sample_query(
+        coords,
+        in_place_radius=rejection_radius,
+        down_sample_radius=query_radius,
+        rejection_radius=None,
+        in_place_k=k,
+        down_sample_k=k,
+        max_sample_size=max_sample_size,
+        leaf_size=leaf_size,
     )
+    return sample_indices, ds_indices, ds_counts
+    # TODO: work out why the below isn't faster. Is it just the parallel search?
+    # tree = KDTree3(coords, leaf_size=leaf_size)
+    # sample_result, query_result = tree.rejection_sample_query(
+    #     rejection_radius ** 2,
+    #     query_radius ** 2,
+    #     tree.get_node_indices(),
+    #     max_counts=coords.shape[0] if k is None else k,
+    #     max_samples=coords.shape[0] if max_sample_size is None else max_sample_size,
+    # )
 
-    sample_count = sample_result.count
-    sample_indices = sample_result.indices[:sample_count]
-    query_counts = query_result.counts[:sample_count]
-    query_indices = flat_ragged_values(
-        query_result.indices[:sample_count], query_counts
-    )
-    return sample_indices, query_indices, query_counts
+    # sample_count = sample_result.count
+    # sample_indices = sample_result.indices[:sample_count]
+    # query_counts = query_result.counts[:sample_count]
+    # query_indices = flat_ragged_values(
+    #     query_result.indices[:sample_count], query_counts
+    # )
+    # return sample_indices, query_indices, query_counts
 
 
 def knn_query(in_coords, out_coords, k: int):
+    from pykdtree.kdtree import (  # pylint: disable=no-name-in-module,import-outside-toplevel
+        KDTree as pyKDTree,
+    )
+
     tree = pyKDTree(in_coords)
     dists, indices = tree.query(out_coords, k)
     return dists, indices

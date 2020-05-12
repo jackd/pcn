@@ -1,3 +1,0 @@
-include 'default.gin'
-batch_size = 32
-variant_id = 'b32'

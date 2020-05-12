@@ -1,5 +1,0 @@
-include 'pca-rot.gin'
-pcn.builders.resnet.ip0 = True
-pcn.builders.resnet.filters0 = 64
-
-variant_id = 'v1'

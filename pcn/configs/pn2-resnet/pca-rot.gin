@@ -1,5 +1,0 @@
-include 'default.gin'
-train/pcn.augment.rotate_scheme = 'pca-xy'
-validation/pcn.augment.rotate_scheme = 'pca-xy'
-
-problem_id = 'pn2-pca-rot'

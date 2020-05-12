@@ -70,8 +70,8 @@ def ragged_down_sample_query(
 ):
     fn = functools.partial(
         _tree.ragged_down_sample_query,
-        rejection_radius=rejection_radius,
-        query_radius=query_radius,
+        rejection_radius=rejection_radius ** 2,
+        query_radius=query_radius ** 2,
         k=k,
         max_sample_size=max_sample_size,
         leaf_size=leaf_size,

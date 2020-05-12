@@ -1,6 +1,0 @@
-include 'default.gin'
-
-ip0 = True
-filters0 = 64
-
-variant_id = 'v1'
