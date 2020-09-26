@@ -19,7 +19,7 @@ kb.framework.multi_graph_trainable.use_model_builders = %use_model_builders
 kb.framework.multi_graph_trainable.model_dir = %model_dir
 
 # kb.framework.fit.profile_batch = 2  # required for tf < 2.2
-kb.framework.fit.profile_batch = (10, 20)
+kb.framework.fit.profile_batch = '2,12'
 
 
 model_dir = @kb.path.model_dir()
@@ -35,10 +35,17 @@ kb.framework.PipelinedSource.shuffle_buffer = %shuffle_buffer
 kb.framework.PipelinedSource.batcher = @kb.framework.RectBatcher()
 kb.framework.PipelinedSource.repeats = None
 kb.framework.RectBatcher.batch_size = %batch_size
-kb.cache.BaseCacheManager.preprocess = True
 kb.cache.cache_managers.root_dir = @cache/kb.path.model_dir()
+kb.cache.BaseCacheManager.preprocess = True
+# kb.cache.cache_managers.train_impl = @SaveLoadManager
+# kb.cache.cache_managers.validation_impl = @SaveLoadManager
+# kb.cache.SaveLoadManager.compression = 'GZIP'
 kb.cache.cache_managers.train_impl = @TFRecordsCacheManager
 kb.cache.cache_managers.validation_impl = @TFRecordsCacheManager
+kb.cache.TFRecordsCacheManager.compression = 'GZIP'
+# There are memory issues with SnapshotManager
+# kb.cache.cache_managers.train_impl = @SnapshotManager
+# kb.cache.cache_managers.validation_impl = @SnapshotManager
 cache/kb.path.model_dir.run = None
 cache/kb.path.model_dir.variant_id = 'cache'
 
@@ -62,6 +69,8 @@ use_model_builders = False
 
 kb.callbacks.CheckpointCallback.save_freq = %save_freq
 save_freq = 1
+
+# pcn.layers.SparseCloudConvolution.use_csr = True
 
 # to define:
 # build_fn =

@@ -65,12 +65,12 @@ class ConvolutionBase(layers.Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
     @abc.abstractmethod
-    def call(self, inputs):
+    def call(self, inputs):  # pylint:disable=arguments-differ
         raise NotImplementedError
 
     def _finalize(self, outputs):
         if self.use_bias:
-            outputs = tf.nn.bias_add(outputs, self.bias)
+            outputs = tf.nn.bias_add(outputs, self.bias)  # pylint:disable=no-member
         if self.activation is not None:
             return self.activation(outputs)  # pylint: disable=not-callable
         return outputs
@@ -132,8 +132,17 @@ class FeaturelessSparseCloudConvolution(ConvolutionBase):
 
 @gin.configurable(module="pcn.layers")
 class SparseCloudConvolution(ConvolutionBase):
-    def __init__(self, *args, **kwargs):
-        self.combine = kwargs.pop("combine", "unstack")
+    def __init__(
+        self,
+        *args,
+        transform_first: Optional[bool] = None,
+        combine: str = "unstack",
+        use_csr: bool = False,
+        **kwargs
+    ):
+        self._conv_kwargs = dict(
+            transform_first=transform_first, combine=combine, use_csr=use_csr
+        )
         super(SparseCloudConvolution, self).__init__(*args, **kwargs)
         self.input_spec = [
             InputSpec(ndim=2),  # [N_in, F_in] node features
@@ -144,8 +153,7 @@ class SparseCloudConvolution(ConvolutionBase):
 
     def get_config(self):
         config = super(SparseCloudConvolution, self).get_config()
-        # base_config['is_ordered'] = self.is_ordered
-        config["combine"] = self.combine
+        config.update(self._conv_kwargs)
         return config
 
     def build(self, input_shape):
@@ -192,8 +200,7 @@ class SparseCloudConvolution(ConvolutionBase):
             indices,
             self.kernel,
             dense_shape,
-            combine=self.combine
-            # is_ordered=self.is_ordered
+            **self._conv_kwargs
         )
         return self._finalize(outputs)
 

@@ -20,14 +20,18 @@ def augment(
     uniform_scale_range: Optional[Tuple[float, float]] = None,
     drop_prob_limits: Optional[Tuple[float, float]] = None,
     up_dim: int = 2,
+    shuffle_first: bool = False,
 ):
     coords.shape.assert_has_rank(2)
     assert coords.shape[1] == 3
 
+    if shuffle_first and shuffle:
+        coords = tf.random.shuffle(coords)
+
     if num_points is not None:
         coords = coords[:num_points]
 
-    if shuffle:
+    if not shuffle_first and shuffle:
         coords = tf.random.shuffle(coords)
 
     if drop_prob_limits is not None:

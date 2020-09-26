@@ -1,0 +1,3 @@
+include 'large-no_drop.gin'
+variant_id = 'denormalized'
+resnet.normalize = False

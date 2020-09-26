@@ -376,7 +376,6 @@ class Neighborhood:
         self._weights = weights
         self._sparse_indices = sparse_indices
         self._normalize = normalize
-
         if weights is None:
             self._normalized_edge_features = edge_features
         else:

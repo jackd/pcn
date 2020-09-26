@@ -17,6 +17,7 @@ def ip_build(
     weight_fn=hat_weight,
     normalize=True,
 ):
+    # in-place
     del num_classes
     cloud = comp.Cloud(coords, bucket_size=True)
     radius = r0
@@ -39,6 +40,7 @@ def ip_pool_build(
     weight_fn=hat_weight,
     normalize=True,
 ):
+    # in-place pooling
     del num_classes
     cloud = comp.Cloud(coords, bucket_size=bucket_size)
     radius = r0
@@ -70,7 +72,7 @@ def ip_ds_pool_build(
     weight_fn=hat_weight,
     normalize=True,
 ):
-
+    # in-place down-sample pooling
     in_cloud = comp.Cloud(coords, bucket_size=bucket_size)
     radius = r0
 

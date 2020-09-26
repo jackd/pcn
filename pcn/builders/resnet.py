@@ -126,6 +126,7 @@ def _resnet_body(
     dropout_rate: float,
     mlp: Callable,
     bottleneck: bool,
+    normalize: bool,
 ):
     radius = r0
     k1 = None if k0 is None else 2 * k0  # for down sample
@@ -140,6 +141,7 @@ def _resnet_body(
             in_place_k=k0,
             down_sample_radius=radius * SQRT_2,
             down_sample_k=k1,
+            normalize=normalize,
         )
 
         # in place conv
@@ -160,7 +162,9 @@ def _resnet_body(
         in_cloud = out_cloud
 
     # final in-place
-    ip_neigh = out_cloud.query(radius * 2, edge_features_fn, weight_fn, k=k0)
+    ip_neigh = out_cloud.query(
+        radius * 2, edge_features_fn, weight_fn, k=k0, normalize=normalize
+    )
     features = identity_block(
         features, ip_neigh, dropout_rate, bottleneck=bottleneck, name=f"ip{num_levels}"
     )
@@ -194,6 +198,7 @@ def resnet(
     dropout_rate: float = 0.5,
     mlp: Callable = simple_mlp,
     bottleneck: bool = True,
+    normalize: bool = True,
 ):
     in_cloud = comp.Cloud(coords, bucket_size=bucket_size)
     features = None
@@ -206,6 +211,7 @@ def resnet(
         in_place_k=k0,
         down_sample_radius=r0 * SQRT_2,
         down_sample_k=k1,
+        normalize=normalize,
     )
 
     # initial in-place conv
@@ -237,6 +243,7 @@ def resnet(
         dropout_rate=dropout_rate,
         mlp=mlp,
         bottleneck=bottleneck,
+        normalize=normalize,
     )
     return _finalize(logits, labels, weights)
 
@@ -257,6 +264,7 @@ def resnet_small(
     dropout_rate: float = 0.5,
     mlp: Callable = simple_mlp,
     bottleneck: bool = True,
+    normalize: bool = True,
 ):
     in_cloud = comp.Cloud(coords, bucket_size=bucket_size)
     features = None
@@ -268,6 +276,7 @@ def resnet_small(
         rejection_radius=r0,
         down_sample_radius=r0 * SQRT_2,
         down_sample_k=k1,
+        normalize=normalize,
     )
 
     # initial down-sample conv
@@ -291,5 +300,6 @@ def resnet_small(
         dropout_rate=dropout_rate,
         mlp=mlp,
         bottleneck=bottleneck,
+        normalize=normalize,
     )
     return _finalize(logits, labels, weights)

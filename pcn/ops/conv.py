@@ -1,5 +1,3 @@
-from __future__ import absolute_import, division, print_function
-
 from typing import Callable, Optional, Tuple
 
 import tensorflow as tf
@@ -85,8 +83,26 @@ def get_sparse_transform(sparse_indices: tf.Tensor, dense_shape: DenseShape):
         sparse_indices = tf.stack(sparse_indices, axis=-1)
 
     def fn(features, edge_features):
-        sp = tf.SparseTensor(sparse_indices, edge_features, dense_shape)
-        return tf.sparse.sparse_dense_matmul(sp, features)
+        st = tf.SparseTensor(sparse_indices, edge_features, dense_shape)
+        return tf.sparse.sparse_dense_matmul(st, features)
+
+    return fn
+
+
+def get_csr_transform(sparse_indices: tf.Tensor, dense_shape: DenseShape):
+    from tensorflow.python.ops.linalg.sparse import (  # pylint: disable=import-outside-toplevel
+        sparse as sparse_lib,
+    )
+
+    # sparse_lib requires tf >= 2.3
+    if isinstance(sparse_indices, (list, tuple)):
+        assert len(sparse_indices) == 2
+        sparse_indices = tf.stack(sparse_indices, axis=-1)
+
+    def fn(features, edge_features):
+        st = tf.SparseTensor(sparse_indices, edge_features, dense_shape)
+        csr = sparse_lib.CSRSparseMatrix(st)
+        return sparse_lib.matmul(csr, features)
 
     return fn
 
@@ -134,10 +150,11 @@ def sparse_conv(
     kernel: TensorOrVariable,
     dense_shape: DenseShape,
     transform_first: Optional[bool] = None,
-    combine="unstack",
+    combine: str = "unstack",
+    use_csr: bool = False,
 ):
     """
-    Graph convolution backed by `tf.foldl`.
+    Graph convolution.
 
     Args:
         features: [N_in, F_in] float tensor of input features.
@@ -146,11 +163,6 @@ def sparse_conv(
         sparse_indices: [E, 2] int tensor of indices of neighbors matrix.
         dense_shape: dense shape of neighbors, value (N_out, N_in).
         kernel: [T, F_in, F_out] float tensor of feature transformations.
-        # is_ordered: bool indicating if `sparse_indices` result from
-        #     `sp.sparse.reorder` or not. Regardless of this value, the first
-        #     column of indices is assumed to be in ascending order. This is not
-        #     checked or enforced but the output will be incorrect if this
-        #     condition is breached.
         transform_first: bool dictating whether to transform before or after
             sparse multiplication. Defaults to the option with fewer operations
             based on the same number of points.
@@ -159,7 +171,19 @@ def sparse_conv(
     Returns:
         [N_out, F_out] float tensor of features.
     """
-    term_impl = get_sparse_transform
+    if use_csr:
+        # assert combine == "unstack"
+        # return csr_sparse_conv(
+        #     features=features,
+        #     edge_features=edge_features,
+        #     sparse_indices=sparse_indices,
+        #     kernel=kernel,
+        #     dense_shape=dense_shape,
+        #     transform_first=transform_first,
+        # )
+        term_impl = get_csr_transform
+    else:
+        term_impl = get_sparse_transform
     # term_impl = get_sparse_transform if is_ordered else get_gather_sum_transform
     T, F_in, F_out = kernel.shape
     if isinstance(dense_shape, tf.Tensor):
@@ -198,9 +222,10 @@ def block_conv(
     sparse_indices: tf.Tensor,
     edge_features: tf.Tensor,
     dense_shape: Tuple[tf.Tensor, tf.Tensor],
-    term_impl: TermImpl = get_sparse_transform,
     transform_first: Optional[bool] = None,
+    use_csr: bool = False,
 ):
+    term_impl = get_csr_transform if use_csr else get_sparse_transform
     T, F_in, F_out = kernel.shape
     N_out, N_in = dense_shape
     if transform_first is None:
@@ -226,25 +251,25 @@ def block_conv(
         features = tf.reshape(features, (T * N_in, -1))
         features = term_impl(sp.indices, (N_out, T * N_in))(features, sp.values)
         return features
-    else:
-        # transform last
-        # concat along axis=0
-        i, j = tf.unstack(sparse_indices, axis=-1)
-        i = tf.expand_dims(i, axis=0) + tf.expand_dims(
-            tf.range(T, dtype=i.dtype) * N_out, axis=1
-        )
-        j = tf.tile(j, (T,))
 
-        i = tf.reshape(i, (-1,))
-        j = tf.reshape(j, (-1,))
-        edge_features = tf.reshape(edge_features, (-1,))
-        features = term_impl(tf.stack((i, j), axis=-1), (T * N_out, N_in))(
-            features, edge_features
-        )
-        features = tf.reshape(features, (T, N_out, F_in))
-        features = tf.reshape(tf.transpose(features, (1, 0, 2)), (N_out, T * F_in))
-        kernel = tf.reshape(kernel, (T * F_in, F_out))
-        return tf.matmul(features, kernel)
+    # transform last
+    # concat along axis=0
+    i, j = tf.unstack(sparse_indices, axis=-1)
+    i = tf.expand_dims(i, axis=0) + tf.expand_dims(
+        tf.range(T, dtype=i.dtype) * N_out, axis=1
+    )
+    j = tf.tile(j, (T,))
+
+    i = tf.reshape(i, (-1,))
+    j = tf.reshape(j, (-1,))
+    edge_features = tf.reshape(edge_features, (-1,))
+    features = term_impl(tf.stack((i, j), axis=-1), (T * N_out, N_in))(
+        features, edge_features
+    )
+    features = tf.reshape(features, (T, N_out, F_in))
+    features = tf.reshape(tf.transpose(features, (1, 0, 2)), (N_out, T * F_in))
+    kernel = tf.reshape(kernel, (T * F_in, F_out))
+    return tf.matmul(features, kernel)
 
 
 def sparse_flex_max_pool(features: tf.Tensor, sparse_indices: tf.Tensor):

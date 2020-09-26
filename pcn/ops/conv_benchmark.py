@@ -1,11 +1,21 @@
-from typing import Dict
+"""
+Script for benchmarking performance of matmuls with `SparseTensor` vs `CSRSparseMatrix`.
+
+Requires tensorflow 2.3 and absl-py
+
+```bash
+pip install tensorflow==2.3
+pip install absl-py
+```
+"""
+from typing import Callable, Dict
 
 import numpy as np
 import tensorflow as tf
 from absl import app, flags
 
-from kblocks.benchmark_utils import summarize_all
-from pcn.ops import conv as conv_ops
+from kblocks.benchmark_utils import summarize, summarize_all
+from pcn.ops.conv import featureless_conv, sparse_conv
 
 flags.DEFINE_integer("ni", default=4096, help="number of points per cloud in")
 flags.DEFINE_integer("no", default=4096, help="number of points per cloud out")
@@ -15,10 +25,15 @@ flags.DEFINE_integer("k", default=9, help="mean number of edges")
 flags.DEFINE_integer("b", default=8, help="batch_size")
 flags.DEFINE_integer("t", default=4, help="number of edge features")
 flags.DEFINE_bool("transform_first", default=False, help="dense matmul first")
-flags.DEFINE_string("combine", default="fold", help='one of "fold", "map", "unstack"')
+flags.DEFINE_string(
+    "combine", default="unstack", help='one of "fold", "map", "unstack"'
+)
 flags.DEFINE_integer("burn", default=10, help="number of burn iterations")
 flags.DEFINE_integer("iters", default=100, help="number of iterations to average over")
 flags.DEFINE_boolean("jit", default=False, help="XLA jit compilation")
+flags.DEFINE_boolean(
+    "csr", default=False, help="Use CSR implementation (requires tf >= 2.3)"
+)
 
 
 def get_conv_args(N_in=4096, N_out=4096, F_in=64, F_out=64, K=9, B=8, T=4) -> Dict:
@@ -48,9 +63,9 @@ def get_conv_args(N_in=4096, N_out=4096, F_in=64, F_out=64, K=9, B=8, T=4) -> Di
             flat_index = flat_index[:num_edges]
             break
     flat_index = np.sort(flat_index)
-    i, j = np.unravel_index(
+    i, j = np.unravel_index(  # pylint: disable=unbalanced-tuple-unpacking
         flat_index, (N_out, N_in)
-    )  # pylint: disable=unbalanced-tuple-unpacking
+    )
     sparse_indices = tf.constant(np.stack((i, j), axis=-1), dtype=tf.int64)
 
     if F_in > 0:
@@ -61,66 +76,63 @@ def get_conv_args(N_in=4096, N_out=4096, F_in=64, F_out=64, K=9, B=8, T=4) -> Di
         kernel = tf.Variable(np.random.uniform(size=(T, F_out)).astype(np.float32))
 
     dense_shape = [tf.constant(N_out), tf.constant(N_in)]
-    return dict(
-        features=features,
-        edge_features=edge_features,
-        sparse_indices=sparse_indices,
-        dense_shape=dense_shape,
-        kernel=kernel,
+    return sparse_indices, edge_features, dense_shape, features, kernel
+
+
+def conv_example(
+    use_csr: bool, combine: str, transform_first: bool, F_in: int, **kwargs
+):
+    sparse_indices, edge_features, dense_shape, features, kernel = get_conv_args(
+        F_in=F_in, **kwargs
     )
-
-
-class SparseOpsBenchmark(tf.test.Benchmark):
-    def benchmark_base(self, burn_iters, min_iters, F_in, call_kwargs={}, **arg_kwargs):
-        graph = tf.Graph()
-        arg_kwargs["F_in"] = F_in
-        with graph.as_default():
-            kwargs = get_conv_args(**arg_kwargs)
-            if F_in == 0:
-                forward = conv_ops.featureless_conv(
-                    edge_features=kwargs["edge_features"],
-                    kernel=kwargs["kernel"],
-                    sparse_indices=kwargs["sparse_indices"],
-                    out_size=kwargs["dense_shape"][0],
-                )
-                train_params = (kwargs["kernel"],)
-                params = tuple(kwargs[k] for k in ("edge_features", "kernel"))
-            else:
-                forward = conv_ops.sparse_conv(**kwargs, **call_kwargs)
-                train_params = kwargs["kernel"], kwargs["features"]
-                params = tuple(
-                    kwargs[k] for k in ("features", "edge_features", "kernel")
-                )
-            backward = tf.gradients(forward, params)
-            backward_kernel = tf.gradients(forward, train_params)
-
-        run_kwargs = dict(burn_iters=burn_iters, min_iters=min_iters)
-
-        with tf.compat.v1.Session(graph=graph) as sess:
-            sess.run(kwargs["kernel"].initializer)
-            print("forward")
-            f = self.run_op_benchmark(sess, forward, **run_kwargs)
-            print("backward (kernel)")
-            bk = self.run_op_benchmark(sess, (forward, backward_kernel), **run_kwargs)
-            print("backward")
-            b = self.run_op_benchmark(sess, (forward, backward), **run_kwargs)
-            summarize_all(
-                ("forward", f), ("backward (kernel)", bk), ("backward", b),
+    with tf.GradientTape() as tape:
+        if F_in == 0:
+            params = kernel
+            tape.watch(params)
+            if use_csr:
+                raise ValueError("No CSR implementation for featureless conv")
+            x = featureless_conv(edge_features, sparse_indices, kernel, dense_shape[0])
+        else:
+            params = kernel, features
+            tape.watch(params)
+            x = sparse_conv(
+                features,
+                edge_features,
+                sparse_indices,
+                kernel,
+                dense_shape,
+                use_csr=use_csr,
+                combine=combine,
+                transform_first=transform_first,
             )
+        grad = tape.gradient(x, params)
+
+    return ("forward", x), ("backward", grad)
+
+
+def benchmark_fn(fn: Callable, burn_iters: int, min_iters: int, **fn_kwargs):
+    with tf.Graph().as_default() as graph:
+        names_and_outputs = fn(**fn_kwargs)
+        with tf.compat.v1.Session(graph=graph) as sess:
+            sess.run(tf.compat.v1.global_variables_initializer())
+            bm = tf.test.Benchmark()
+            results = []
+            for name, output in names_and_outputs:
+                print(f"Starting benchmark {name}...")
+                result = bm.run_op_benchmark(
+                    sess, output, burn_iters=burn_iters, min_iters=min_iters
+                )
+                summarize(result)
+                results.append((name, result))
+    print("-----")
+    summarize_all(*results)
+    return results
 
 
 def main(_):
-    # # tf.test.main()
-    # def printb(x):
-    #     print('-------------------')
-    #     print(x)
-    #     print('-------------------')
-
-    # printb('base')
     FLAGS = flags.FLAGS
     tf.config.optimizer.set_jit(FLAGS.jit)
-    bm = SparseOpsBenchmark()
-    bm.benchmark_base(
+    call_kwargs = dict(
         N_in=FLAGS.ni,
         N_out=FLAGS.no,
         F_in=FLAGS.fi,
@@ -128,20 +140,13 @@ def main(_):
         B=FLAGS.b,
         T=FLAGS.t,
         K=FLAGS.k,
-        burn_iters=FLAGS.burn,
-        min_iters=FLAGS.iters,
-        call_kwargs=dict(transform_first=FLAGS.transform_first, combine=FLAGS.combine),
+        use_csr=FLAGS.csr,
+        combine=FLAGS.combine,
+        transform_first=FLAGS.transform_first,
     )
-
-    # printb('fold, first')
-    # bm.benchmark_base(call_kwargs=dict(transform_first=True, impl='fold'))
-    # printb('fold, last')
-    # bm.benchmark_base(call_kwargs=dict(transform_first=False, impl='fold'))
-
-    # printb('unstack, first')
-    # bm.benchmark_base(call_kwargs=dict(transform_first=True, impl='unstack'))
-    # printb('unstack, last')
-    # bm.benchmark_base(call_kwargs=dict(transform_first=False, impl='unstack'))
+    benchmark_fn(
+        conv_example, burn_iters=FLAGS.burn, min_iters=FLAGS.iters, **call_kwargs
+    )
 
 
 if __name__ == "__main__":

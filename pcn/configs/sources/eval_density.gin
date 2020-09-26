@@ -1,0 +1,10 @@
+# evaluate with variable number of points
+# recommended to run separately from training, e.g.
+# python -m kblocks '$KB_CONFIG/eval' pn2-resnet/large.gin sources/eval_density.gin --bindings='eval_num_points=256'
+kb.framework.PipelinedSource.cache_managers = None
+validation/pcn.augment.num_points = %eval_num_points
+validation/pcn.augment.shuffle_first = %shuffle_first
+validation/pcn.augment.shuffle = True
+
+eval_num_points = 256
+shuffle_first = False

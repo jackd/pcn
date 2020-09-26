@@ -2,6 +2,8 @@ import kblocks.extras.cache
 
 kb.cache.cache_managers.train_impl = @kb.cache.RepeatCacheManager
 RepeatCacheManager.manager_impl = @TFRecordsCacheManager
+# RepeatCacheManager.manager_impl = @SnapshotManager
+# RepeatCacheManager.manager_impl = @SaveLoadManager
 
 RepeatCacheManager.num_repeats = %cache_repeats
 BaseCacheManager.preprocess = True

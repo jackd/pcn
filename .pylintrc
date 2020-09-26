@@ -14,7 +14,8 @@ disable=
     too-many-locals,
     invalid-unary-operand-type,
     not-context-manager,
-    redefined-builtin
+    redefined-builtin,
+    attribute-defined-outside-init,
 
 [format]
 

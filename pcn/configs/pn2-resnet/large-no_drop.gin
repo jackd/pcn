@@ -1,0 +1,4 @@
+include 'large.gin'
+include '../sources/no_drop.gin'
+
+problem_id = 'large-no_drop'

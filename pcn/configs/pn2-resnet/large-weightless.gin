@@ -1,0 +1,3 @@
+include 'large.gin'
+variant_id = 'weightless'
+resnet.weight_fn = None
