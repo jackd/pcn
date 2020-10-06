@@ -4,7 +4,7 @@ import gin
 import numpy as np
 import tensorflow as tf
 
-import kblocks.multi_graph as mg
+import multi_graph as mg
 import pcn.components as comp
 from kblocks.keras import layers
 from pcn.builders.utils import hat_weight, polynomial_edge_features, simple_mlp

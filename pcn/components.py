@@ -6,8 +6,8 @@ import tensorflow as tf
 # from kblocks.utils import memoized_property
 import kblocks.extras.layers.ragged as ragged_layers
 import kblocks.extras.layers.shape as shape_layers
+import multi_graph as mg
 import pcn.ops.utils as utils_ops
-from kblocks import multi_graph as mg
 from pcn.layers import conv as conv_layers
 from pcn.layers import tree as tree_layers
 

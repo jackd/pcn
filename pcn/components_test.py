@@ -3,7 +3,7 @@ import functools
 import numpy as np
 import tensorflow as tf
 
-import kblocks.multi_graph as mg
+import multi_graph as mg
 import pcn.components as comp
 from pcn.builders.utils import hat_weight, polynomial_edge_features
 
