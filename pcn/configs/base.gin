@@ -12,7 +12,7 @@ import pcn.components
 trainable = @kb.framework.multi_graph_trainable()
 kb.framework.multi_graph_trainable.build_fn = %build_fn
 kb.framework.multi_graph_trainable.base_source = %base_source
-kb.framework.multi_graph_trainable.batch_size = None  # build without batch size
+kb.framework.multi_graph_trainable.batch_size = %batch_size
 kb.framework.multi_graph_trainable.compiler = %compiler
 kb.framework.multi_graph_trainable.use_model_builders = %use_model_builders
 kb.framework.multi_graph_trainable.model_dir = %model_dir

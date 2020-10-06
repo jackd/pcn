@@ -1,3 +1,5 @@
 numba
-tensorflow_datasets==2.0.0
-git+git://github.com/jackd/shape-tfds
+kblocks@ git+git://github.com/jackd/kblocks.git
+multi-graph@ git+git://github.com/jackd/multi-graph.git
+shape-tfds@ git+git://github.com/jackd/shape-tfds.git
+numba-neighbors@ git+git://github.com/jackd/numba-neighbors.git

@@ -72,7 +72,7 @@ def _ragged_ifp_sample_precomputed(args, **kwargs):
 
 
 def ragged_ifp_sample_precomputed(dists, indices, row_lengths, sample_size, eps=1e-8):
-    args = [dists, indices]
+    args = [dists, indices, row_lengths]
     kwargs = dict(eps=eps)
     if isinstance(sample_size, int):
         kwargs["sample_size"] = sample_size

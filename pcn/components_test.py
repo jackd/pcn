@@ -19,15 +19,15 @@ def ip_build(
 ):
     # in-place
     del num_classes
+    features = None
+    labels = mg.batch(mg.cache(labels))
     cloud = comp.Cloud(coords, bucket_size=True)
     radius = r0
     ip_neigh = cloud.query(
         radius, polynomial_edge_features, weight_fn, k0, normalize=normalize
     )
-    features = None
     features = ip_neigh.convolve(features, filters=3, activation="relu")
-    # features = ip_neigh.convolve(features, filters=2, activation='relu')
-    return features, mg.batch(mg.cache(labels))
+    return features, labels
 
 
 def ip_pool_build(
@@ -42,12 +42,13 @@ def ip_pool_build(
 ):
     # in-place pooling
     del num_classes
+    features = None
+    labels = mg.batch(mg.cache(labels))
     cloud = comp.Cloud(coords, bucket_size=bucket_size)
     radius = r0
     ip_neigh = cloud.query(
         radius, polynomial_edge_features, weight_fn, k0, normalize=normalize
     )
-    features = None
     features = ip_neigh.convolve(features, filters=3, activation="relu")
     features = ip_neigh.convolve(features, filters=2, activation="relu")
     valid_size = cloud.valid_size
@@ -59,7 +60,7 @@ def ip_pool_build(
     features = tf.math.unsorted_segment_max(
         features, cloud.model_structure.value_rowids, cloud.model_structure.nrows
     )
-    return features, mg.batch(mg.cache(labels))
+    return features, labels
 
 
 def ip_ds_pool_build(

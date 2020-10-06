@@ -9,27 +9,32 @@ Installation:
 
 ```bash
 # pip dependencies
+# not included in requirements.txt because tf-nightly might be installed
 pip install tensorflow==2.3  # 2.2 also works except for CSR
-pip install tensorflow-datasets==2.0.0 Pillow numba trimesh
 
 # pip packages from git
-git clone https://github.com/jackd/shape-tfds.git
-git clone https://github.com/jackd/kblocks.git
-git clone https://github.com/jackd/numba-neighbors.git
 git clone https://github.com/jackd/pcn.git
-pip install -e shape-tfds
-pip install -e kblocks
-pip install -e numba-neighbors
 pip install -e pcn
-
-cd pcn
 ```
 
 Train the large resnet model from the paper:
 
 ```bash
-python -m kblocks '$KB_CONFIG/fit' pcn/configs/pn2-resnet/large.gin
+python -m pcn '$KB_CONFIG/fit' '$PCN_CONFIG/pn2-resnet/large.gin'
 ```
+
+## Project Structure
+
+This project depends on multiple custom python packages. These are:
+
+- [multi-graph](https://github.com/jackd/multi-graph.git) for simultaneously building and connecting the multiple graphs associated with data pipelining and model training.
+- [kblocks](https://github.com/jackd/kblocks.git) for experiment management and configuration via [gin-config](https://github.com/google/gin-config.git).
+- [shape-tfds](https://github.com/jackd/shape-tfds.git) for[tensorflow-datasets](https://github.com/tensorflow/datasets.git) implementations that manage dataset downloading and model-independent preprocessing for 3D shape-based datasets.
+- [numba-neighbors](https://github.com/jackd/numba-neighbors.git) for [numba](https://github.com/numba/numba.git) implementations of KDTrees and subsampling.
+
+## `python -m pcn`
+
+`python -m pcn` is a light wrapper around `python -m kblocks` which exposes `$PCN_CONFIG` for command line argument just like `$KB_CONFIG` is exposed in `kblocks`. In particular, note that `$PCN_CONFIG` is set inside the python script, so must be passed as a string, e.g. `python -m pcn '$PCN_CONFIG/foo'` rather than `python -m pcn $PCN_CONFIG/foo`.
 
 ## Benchmark Results
 
@@ -64,8 +69,8 @@ Results below are on an 8-core machine with GTX-1080Ti.
 #### Online preprocessing
 
 ```bash
-python -m kblocks '$KB_CONFIG/benchmark' \
-    pcn/configs/pn2-resnet/large.gin \
+python -m pcn '$KB_CONFIG/benchmark' \
+    '$PCN_CONFIG/pn2-resnet/large.gin' \
     --bindings='
         shuffle_buffer = 1  # ensure preprocess time is included
         PipelinedSource.cache_managers = None  # preprocesses online
@@ -87,8 +92,8 @@ Memory (Mb):    1852.4022178649902
 This will take a while - mostly because it will generate cached files for 32 epochs.
 
 ```bash
-python -m kblocks '$KB_CONFIG/benchmark' \
-    pcn/configs/pn2-resnet/large.gin \
+python -m pcn '$KB_CONFIG/benchmark' \
+    '$PCN_CONFIG/pn2-resnet/large.gin' \
     --bindings='
         batch_size=1024
     '

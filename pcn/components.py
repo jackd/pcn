@@ -14,7 +14,12 @@ from pcn.layers import tree as tree_layers
 IntTensor = tf.Tensor
 FloatTensor = tf.Tensor
 
-Lambda = tf.keras.layers.Lambda
+# Lambda = tf.keras.layers.Lambda
+
+
+def Lambda(*args, **kwargs):
+    assert tf.executing_eagerly()
+    return tf.keras.layers.Lambda(*args, **kwargs)
 
 
 @functools.wraps(tf.stack)
@@ -69,8 +74,8 @@ class RaggedStructure:
 
     @memoized_property
     def value_rowids(self) -> IntTensor:
-        # return tf.ragged.row_splits_to_segment_ids(self.row_splits)
-        return Lambda(tf.ragged.row_splits_to_segment_ids)(self.row_splits)
+        return tf.ragged.row_splits_to_segment_ids(self.row_splits)
+        # return Lambda(tf.ragged.row_splits_to_segment_ids)(self.row_splits)
 
     @memoized_property
     def nrows(self) -> IntTensor:
@@ -118,9 +123,10 @@ class Cloud:
                 valid_size = tf.expand_dims(
                     valid_size, axis=0
                 )  # so it can be a keras input
-                batched_values = Lambda(utils_ops.pad_ragged_to_nearest_power)(
-                    batched_values
-                )
+                batched_values = utils_ops.pad_ragged_to_nearest_power(batched_values)
+                # batched_values = Lambda(utils_ops.pad_ragged_to_nearest_power)(
+                #     batched_values
+                # )
             valid_size = mg.model_input(valid_size)
             self._valid_size = tf.squeeze(valid_size, axis=0)
         else:
@@ -328,7 +334,8 @@ def _ragged_to_block_sparse(args):
 
 
 def ragged_to_block_sparse(ragged_indices, offset):
-    return Lambda(_ragged_to_block_sparse)([ragged_indices, offset])
+    # return Lambda(_ragged_to_block_sparse)([ragged_indices, offset])
+    return _ragged_to_block_sparse([ragged_indices, offset])
 
 
 def neighborhood(
