@@ -90,8 +90,8 @@ def get_sparse_transform(sparse_indices: tf.Tensor, dense_shape: DenseShape):
 
 
 def get_csr_transform(sparse_indices: tf.Tensor, dense_shape: DenseShape):
-    from tensorflow.python.ops.linalg.sparse import (  # pylint: disable=import-outside-toplevel
-        sparse as sparse_lib,
+    from tensorflow.python.ops.linalg.sparse import (
+        sparse as sparse_lib,  # pylint: disable=import-outside-toplevel
     )
 
     # sparse_lib requires tf >= 2.3
