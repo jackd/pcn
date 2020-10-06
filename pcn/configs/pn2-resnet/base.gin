@@ -5,6 +5,6 @@ include '../misc/rlrp.gin'
 train/pcn.augment.rotate_scheme = 'none'
 
 batch_size = 128
-epochs = 1000
+epochs = 500
 save_freq = 5
 validation_freq = 5

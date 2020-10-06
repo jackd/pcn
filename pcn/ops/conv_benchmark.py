@@ -34,9 +34,12 @@ flags.DEFINE_boolean("jit", default=False, help="XLA jit compilation")
 flags.DEFINE_boolean(
     "csr", default=False, help="Use CSR implementation (requires tf >= 2.3)"
 )
+flags.DEFINE_integer("seed", default=0, help="seed for random number generation")
 
 
-def get_conv_args(N_in=4096, N_out=4096, F_in=64, F_out=64, K=9, B=8, T=4) -> Dict:
+def get_conv_args(
+    N_in=4096, N_out=4096, F_in=64, F_out=64, K=9, B=8, T=4, seed=0
+) -> Dict:
     print("{:10}: {}".format("N_in", N_in))
     print("{:10}: {}".format("N_out", N_out))
     print("{:10}: {}".format("F_in", F_in))
@@ -44,13 +47,15 @@ def get_conv_args(N_in=4096, N_out=4096, F_in=64, F_out=64, K=9, B=8, T=4) -> Di
     print("{:10}: {}".format("K", K))
     print("{:10}: {}".format("B", B))
     print("{:10}: {}".format("T", T))
+    print("{:10}: {}".format("seed", seed))
 
+    np.random.seed(seed)
     N_in = N_in * B
     N_out = N_out * B
     num_edges = K * N_out
 
-    features = tf.random.normal((N_in, F_in), dtype=tf.float32)
-    edge_features = tf.random.normal((T, num_edges), dtype=tf.float32)
+    features = tf.constant(np.random.normal(size=(N_in, F_in)), dtype=tf.float32)
+    edge_features = tf.constant(np.random.normal(size=(T, num_edges)), dtype=tf.float32)
     while True:
         flat_index = np.random.randint(
             0,
@@ -143,6 +148,7 @@ def main(_):
         use_csr=FLAGS.csr,
         combine=FLAGS.combine,
         transform_first=FLAGS.transform_first,
+        seed=FLAGS.seed,
     )
     benchmark_fn(
         conv_example, burn_iters=FLAGS.burn, min_iters=FLAGS.iters, **call_kwargs
