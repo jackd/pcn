@@ -134,7 +134,7 @@ class ShapenetPartSource(TfdsSource):
         self._train_map_fn = train_map_fn
         self._validation_map_fn = validation_map_fn
         self._weighted = weighted
-        meta = dict(logits_mask=_get_logits_mask(),)
+        meta = dict(logits_mask=_get_logits_mask())
         super().__init__(builder=builder, meta=meta, **kwargs)
 
     def get_dataset(self, split) -> tf.data.Dataset:
@@ -183,8 +183,9 @@ class ShapenetPartSingleSource(TfdsSource):
 
 
 def vis_source(source: TfdsSource, split="train"):
-    # import trimesh
     from mayavi import mlab
+
+    # import trimesh
 
     dataset = source.get_dataset(split)
     for args in dataset:

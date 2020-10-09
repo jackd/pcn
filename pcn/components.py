@@ -3,7 +3,6 @@ from typing import Any, Optional, Tuple
 
 import tensorflow as tf
 
-# from kblocks.utils import memoized_property
 import kblocks.extras.layers.ragged as ragged_layers
 import kblocks.extras.layers.shape as shape_layers
 import multi_graph as mg
@@ -14,12 +13,7 @@ from pcn.layers import tree as tree_layers
 IntTensor = tf.Tensor
 FloatTensor = tf.Tensor
 
-# Lambda = tf.keras.layers.Lambda
-
-
-def Lambda(*args, **kwargs):
-    assert tf.executing_eagerly()
-    return tf.keras.layers.Lambda(*args, **kwargs)
+Lambda = tf.keras.layers.Lambda
 
 
 @functools.wraps(tf.stack)

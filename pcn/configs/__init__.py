@@ -1,10 +1,6 @@
 import os
 
-from absl import logging
+from kblocks.gin_utils.config import try_register_config_dir
 
-PCN_CONFIG = os.path.realpath(os.path.dirname(__file__))
-
-if os.environ.get("PCN_CONFIG"):
-    logging.warning("PCN_CONFIG environment variable already set.")
-else:
-    os.environ["PCN_CONFIG"] = PCN_CONFIG
+PCN_CONFIG_DIR = os.path.realpath(os.path.dirname(__file__))
+try_register_config_dir("PCN_CONFIG", PCN_CONFIG_DIR)
