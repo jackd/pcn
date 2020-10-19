@@ -186,7 +186,10 @@ def sparse_conv(
         term_impl = get_sparse_transform
     # term_impl = get_sparse_transform if is_ordered else get_gather_sum_transform
     T, F_in, F_out = kernel.shape
-    if isinstance(dense_shape, tf.Tensor):
+    if not isinstance(dense_shape, (list, tuple)):
+        assert tf.is_tensor(dense_shape) or tf.keras.backend.is_keras_tensor(
+            dense_shape
+        )
         dense_shape = tf.unstack(dense_shape, axis=0)
     N_out, N_in = dense_shape
     if transform_first is None:
@@ -266,6 +269,7 @@ def block_conv(
     features = term_impl(tf.stack((i, j), axis=-1), (T * N_out, N_in))(
         features, edge_features
     )
+    tf.assert_equal(tf.size(features), T * N_out * F_in)
     features = tf.reshape(features, (T, N_out, F_in))
     features = tf.reshape(tf.transpose(features, (1, 0, 2)), (N_out, T * F_in))
     kernel = tf.reshape(kernel, (T * F_in, F_out))

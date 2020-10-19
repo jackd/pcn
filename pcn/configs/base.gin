@@ -1,21 +1,21 @@
 import kblocks.extras.cache
 import kblocks.extras.cache.tfrecords
 import kblocks.extras.callbacks.checkpoint
+import kblocks.framework.batchers
 import kblocks.framework.compilers
-import kblocks.framework.multi_graph
+import kblocks.framework.meta_model
 import kblocks.framework.sources.pipelined
 import kblocks.keras.optimizers
 import kblocks.path
 import pcn.augment
 import pcn.components
 
-trainable = @kb.framework.multi_graph_trainable()
-kb.framework.multi_graph_trainable.build_fn = %build_fn
-kb.framework.multi_graph_trainable.base_source = %base_source
-kb.framework.multi_graph_trainable.batch_size = %batch_size
-kb.framework.multi_graph_trainable.compiler = %compiler
-kb.framework.multi_graph_trainable.use_model_builders = %use_model_builders
-kb.framework.multi_graph_trainable.model_dir = %model_dir
+trainable = @kb.framework.meta_model_trainable()
+kb.framework.meta_model_trainable.build_fn = %build_fn
+kb.framework.meta_model_trainable.base_source = %base_source
+kb.framework.meta_model_trainable.batcher = @kb.framework.RaggedBatcher()
+kb.framework.meta_model_trainable.compiler = %compiler
+kb.framework.meta_model_trainable.model_dir = %model_dir
 
 # kb.framework.fit.profile_batch = 2  # required for tf < 2.2
 kb.framework.fit.profile_batch = '2,12'
@@ -31,22 +31,28 @@ kb.path.model_dir.run = %run
 kb.framework.PipelinedSource.clear_cache = %clear_cache
 kb.framework.PipelinedSource.cache_managers = @kb.cache.cache_managers()
 kb.framework.PipelinedSource.shuffle_buffer = %shuffle_buffer
-kb.framework.PipelinedSource.batcher = @kb.framework.RectBatcher()
-kb.framework.PipelinedSource.repeats = None
-kb.framework.RectBatcher.batch_size = %batch_size
+kb.framework.PipelinedSource.batcher = @kb.framework.RaggedBatcher()
+kb.framework.RaggedBatcher.batch_size = %batch_size
 kb.cache.cache_managers.root_dir = @cache/kb.path.model_dir()
 kb.cache.BaseCacheManager.preprocess = True
-# kb.cache.cache_managers.train_impl = @SaveLoadManager
-# kb.cache.cache_managers.validation_impl = @SaveLoadManager
-# kb.cache.SaveLoadManager.compression = 'GZIP'
-kb.cache.cache_managers.train_impl = @TFRecordsCacheManager
-kb.cache.cache_managers.validation_impl = @TFRecordsCacheManager
-kb.cache.TFRecordsCacheManager.compression = 'GZIP'
-# There are memory issues with SnapshotManager
-# kb.cache.cache_managers.train_impl = @SnapshotManager
-# kb.cache.cache_managers.validation_impl = @SnapshotManager
+kb.cache.cache_managers.train_impl = %cache_manager_impl
+kb.cache.cache_managers.validation_impl = %cache_manager_impl
 cache/kb.path.model_dir.run = None
 cache/kb.path.model_dir.variant_id = 'cache'
+
+cache_manager_impl = @SnapshotManager
+SnapshotManager.compression = 'GZIP'  # one of 'GZIP', 'SNAPPY', 'AUTO', None
+SnapshotManager.preprocess = %preprocess
+
+# alternative cache manager implementations
+# cache_manager_impl = @TFRecordsCacheManager
+# TFRecordsCacheManager.compression = 'GZIP'
+# TFRecordsCacheManager.preprocess = preprocess
+
+# cache_manager_impl = @SaveLoadManager
+# SaveLoadManager.compression = 'GZIP'
+
+preprocess = False
 
 shuffle_buffer = 1024
 
@@ -63,8 +69,6 @@ clear_cache = False
 
 train_cache_dir = @train/cache/kb.path.model_dir()
 validation_cache_dir = @validation/cache/kb.path.model_dir()
-
-use_model_builders = False
 
 kb.callbacks.CheckpointCallback.save_freq = %save_freq
 save_freq = 1

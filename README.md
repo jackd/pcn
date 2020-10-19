@@ -23,11 +23,13 @@ Train the large resnet model from the paper:
 python -m pcn '$KB_CONFIG/fit' '$PCN_CONFIG/pn2-resnet/large.gin'
 ```
 
+Note the first 32 epochs may take longer than the rest as the input data is processed online (this is saved to a [snapshot](https://www.tensorflow.org/api_docs/python/tf/data/experimental/snapshot) for the remaining epochs).
+
 ## Project Structure
 
 This project depends on multiple custom python packages. These are:
 
-- [multi-graph](https://github.com/jackd/multi-graph.git) for simultaneously building and connecting the multiple graphs associated with data pipelining and model training.
+- [meta-model](https://github.com/jackd/meta-model.git) for simultaneously building and connecting the multiple models associated with data pipelining and model training.
 - [kblocks](https://github.com/jackd/kblocks.git) for experiment management and configuration via [gin-config](https://github.com/google/gin-config.git).
 - [shape-tfds](https://github.com/jackd/shape-tfds.git) for[tensorflow-datasets](https://github.com/tensorflow/datasets.git) implementations that manage dataset downloading and model-independent preprocessing for 3D shape-based datasets.
 - [numba-neighbors](https://github.com/jackd/numba-neighbors.git) for [numba](https://github.com/numba/numba.git) implementations of KDTrees and subsampling.
@@ -72,8 +74,8 @@ Results below are on an 8-core machine with GTX-1080Ti.
 python -m pcn '$KB_CONFIG/benchmark' \
     '$PCN_CONFIG/pn2-resnet/large.gin' \
     --bindings='
-        shuffle_buffer = 1  # ensure preprocess time is included
-        PipelinedSource.cache_managers = None  # preprocesses online
+        shuffle_buffer = None  # disable shuffling
+        cache_manager_impl = None  # preprocesses online
         batch_size=1024  # default is 128
         burn_iters=5  # default is 5
         min_iters=20  # default is 100
@@ -89,12 +91,13 @@ Memory (Mb):    1852.4022178649902
 
 #### Offline preprocessing
 
-This will take a while - mostly because it will generate cached files for 32 epochs.
+This will take a while if cached files have not been created yet.
 
 ```bash
 python -m pcn '$KB_CONFIG/benchmark' \
     '$PCN_CONFIG/pn2-resnet/large.gin' \
     --bindings='
+        preprocess=True
         batch_size=1024
     '
 ```

@@ -4,7 +4,7 @@ import gin
 import numpy as np
 import tensorflow as tf
 
-import multi_graph as mg
+import meta_model.pipeline as pl
 import pcn.components as comp
 from kblocks.keras import layers
 from pcn.builders.utils import hat_weight, polynomial_edge_features, simple_mlp
@@ -169,17 +169,16 @@ def _resnet_body(
         features, ip_neigh, dropout_rate, bottleneck=bottleneck, name=f"ip{num_levels}"
     )
     features = layers.Dense(filters * 4)(features)
-    features = out_cloud.mask_invalid(features)
     features = tf.math.segment_max(features, out_cloud.model_structure.value_rowids)
     logits = mlp(features, num_classes=num_classes, activate_first=True)
     return logits
 
 
 def _finalize(logits: FloatTensor, labels: IntTensor, weights: Optional[FloatTensor]):
-    labels = mg.batch(mg.cache(labels))
+    labels = pl.batch(pl.cache(labels))
     if weights is None:
         return logits, labels
-    return logits, labels, mg.batch(mg.cache(weights))
+    return logits, labels, pl.batch(pl.cache(weights))
 
 
 @gin.configurable(module="pcn.builders")
@@ -188,7 +187,6 @@ def resnet(
     labels: IntTensor,
     weights: Optional[FloatTensor] = None,
     num_classes: int = 40,
-    bucket_size: bool = False,
     num_levels: int = 3,
     filters0: int = 32,
     edge_features_fn: TensorMap = polynomial_edge_features,
@@ -200,7 +198,7 @@ def resnet(
     bottleneck: bool = True,
     normalize: bool = True,
 ):
-    in_cloud = comp.Cloud(coords, bucket_size=bucket_size)
+    in_cloud = comp.Cloud(coords)
     features = None
     k1 = None if k0 is None else 2 * k0  # for down sample
 
@@ -254,7 +252,6 @@ def resnet_small(
     labels: tf.Tensor,
     weights: Optional[tf.Tensor] = None,
     num_classes: int = 40,
-    bucket_size: bool = False,
     num_levels: int = 3,
     filters0: int = 32,
     edge_features_fn: TensorMap = polynomial_edge_features,
@@ -266,7 +263,7 @@ def resnet_small(
     bottleneck: bool = True,
     normalize: bool = True,
 ):
-    in_cloud = comp.Cloud(coords, bucket_size=bucket_size)
+    in_cloud = comp.Cloud(coords)
     features = None
     k1 = None if k0 is None else 2 * k0  # for down sample
 

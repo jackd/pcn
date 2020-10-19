@@ -189,7 +189,7 @@ class SparseCloudConvolution(ConvolutionBase):
             self.bias = None
         self.input_spec[0] = InputSpec(shape=(None, num_node_features))
         self.input_spec[1] = InputSpec(shape=(num_edge_features, None))
-        super(SparseCloudConvolution, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, inputs):
         node_features, edge_features, indices, out_size = inputs

@@ -37,7 +37,7 @@ def ragged_in_place_query(
 ):
     return Lambda(
         _tree_ops.ragged_in_place_query,
-        arguments=dict(radius=radius, k=k, leaf_size=leaf_size,),
+        arguments=dict(radius=radius, k=k, leaf_size=leaf_size),
     )(coords)
 
 

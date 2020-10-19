@@ -5,9 +5,7 @@ build_fn = @pcn.builders.resnet
 
 pcn.builders.resnet.filters0 = %filters0
 pcn.builders.resnet.num_levels = %num_levels
-pcn.builders.resnet.bucket_size = %bucket_size
 
-bucket_size = False
 filters0 = 32
 num_levels = 3
 

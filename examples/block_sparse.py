@@ -1,3 +1,4 @@
+"""Visualize block-diagonalized matrices from `components.ragged_to_block_sparse`."""
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf

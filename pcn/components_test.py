@@ -2,10 +2,16 @@ import functools
 
 import numpy as np
 import tensorflow as tf
+from absl.testing import parameterized
 
-import multi_graph as mg
+import meta_model.pipeline as pl
 import pcn.components as comp
+from meta_model.batchers import RaggedBatcher
 from pcn.builders.utils import hat_weight, polynomial_edge_features
+
+
+def batch(dataset: tf.data.Dataset, batch_size: int):
+    return dataset.apply(tf.data.experimental.dense_to_ragged_batch(batch_size))
 
 
 def ip_build(
@@ -20,8 +26,8 @@ def ip_build(
     # in-place
     del num_classes
     features = None
-    labels = mg.batch(mg.cache(labels))
-    cloud = comp.Cloud(coords, bucket_size=True)
+    labels = pl.batch(pl.cache(labels))
+    cloud = comp.Cloud(coords)
     radius = r0
     ip_neigh = cloud.query(
         radius, polynomial_edge_features, weight_fn, k0, normalize=normalize
@@ -33,7 +39,6 @@ def ip_build(
 def ip_pool_build(
     coords,
     labels,
-    bucket_size=False,
     r0=0.1125,
     k0=32,
     num_classes=10,
@@ -43,20 +48,14 @@ def ip_pool_build(
     # in-place pooling
     del num_classes
     features = None
-    labels = mg.batch(mg.cache(labels))
-    cloud = comp.Cloud(coords, bucket_size=bucket_size)
+    labels = pl.batch(pl.cache(labels))
+    cloud = comp.Cloud(coords)
     radius = r0
     ip_neigh = cloud.query(
         radius, polynomial_edge_features, weight_fn, k0, normalize=normalize
     )
     features = ip_neigh.convolve(features, filters=3, activation="relu")
     features = ip_neigh.convolve(features, filters=2, activation="relu")
-    valid_size = cloud.valid_size
-    if valid_size is not None:
-        mask = tf.expand_dims(
-            tf.sequence_mask(valid_size, tf.shape(features)[0]), axis=-1
-        )
-        features = tf.where(mask, features, tf.zeros_like(features))
     features = tf.math.unsorted_segment_max(
         features, cloud.model_structure.value_rowids, cloud.model_structure.nrows
     )
@@ -66,7 +65,6 @@ def ip_pool_build(
 def ip_ds_pool_build(
     coords,
     labels,
-    bucket_size=False,
     r0=0.1125,
     k0=32,
     num_classes=10,
@@ -74,7 +72,7 @@ def ip_ds_pool_build(
     normalize=True,
 ):
     # in-place down-sample pooling
-    in_cloud = comp.Cloud(coords, bucket_size=bucket_size)
+    in_cloud = comp.Cloud(coords)
     radius = r0
 
     out_cloud, ip_neigh, ds_neigh = in_cloud.sample_query(
@@ -91,24 +89,21 @@ def ip_ds_pool_build(
     features = ip_neigh.convolve(features, filters=5, activation="relu")
     features = ip_neigh.convolve(features, filters=7, activation="relu")
     features = ds_neigh.convolve(features, filters=11, activation="relu")
-    valid_size = out_cloud.valid_size
-    if valid_size is not None:
-        mask = tf.expand_dims(
-            tf.sequence_mask(valid_size, tf.shape(features)[0]), axis=-1
-        )
-        features = tf.where(mask, features, tf.zeros_like(features))
     features = tf.math.unsorted_segment_max(
         features,
         out_cloud.model_structure.value_rowids,
         out_cloud.model_structure.nrows,
     )
     logits = tf.keras.layers.Dense(num_classes)(features)
-    return logits, mg.batch(mg.cache(labels))
+    return logits, pl.batch(pl.cache(labels))
 
 
-class ComponentsTest(tf.test.TestCase):
+normalize_options = ((False,), (True,))
+
+
+class ComponentsTest(tf.test.TestCase, parameterized.TestCase):
     def _test_build_fn(self, build_fn):
-        batch_size = 4
+        batch_size = 3
         num_points = 1024
         num_classes = 2
 
@@ -119,18 +114,26 @@ class ComponentsTest(tf.test.TestCase):
             (coords, tf.range(batch_size) % num_classes)
         )
 
-        built = mg.build_multi_graph(build_fn, dataset.element_spec)
+        batcher1 = RaggedBatcher(batch_size=1)
+        pipeline1, model = pl.build_pipelined_model(
+            build_fn, dataset.element_spec, batcher=batcher1
+        )
 
-        ds = dataset.map(built.pre_cache_map).map(built.pre_batch_map)
-        ds1 = ds.batch(1).map(built.post_batch_map)
+        ds = dataset.map(pipeline1.pre_cache_map).map(pipeline1.pre_batch_map)
+        ds1 = batcher1(ds).map(pipeline1.post_batch_map)
         val1 = []
-        model = built.trained_model
-        for features, _ in ds1:
+        for features, _ in ds1.take(batch_size):
             val = model(features)
             val1.append(self.evaluate(val))
         val1 = np.concatenate(val1, axis=0)
 
-        ds_batched = ds.batch(batch_size).map(built.post_batch_map)
+        batcher = RaggedBatcher(batch_size=batch_size)
+        pipeline, _ = pl.build_pipelined_model(
+            build_fn, dataset.element_spec, batcher=batcher
+        )
+
+        ds = dataset.map(pipeline.pre_cache_map).map(pipeline.pre_batch_map)
+        ds_batched = batcher(ds).map(pipeline.post_batch_map)
         val_batched = None
         for features, _ in ds_batched:
             assert val_batched is None
@@ -138,27 +141,17 @@ class ComponentsTest(tf.test.TestCase):
 
         np.testing.assert_allclose(val1, val_batched, atol=1e-4)
 
-    def test_ip(self):
-        for normalize in (False, True):
-            self._test_build_fn(functools.partial(ip_build, normalize=normalize))
+    @parameterized.parameters(*normalize_options)
+    def test_ip(self, normalize):
+        self._test_build_fn(functools.partial(ip_build, normalize=normalize))
 
-    def test_ip_pool(self):
-        for bucket_size in (False, True):
-            for normalize in (False, True):
-                self._test_build_fn(
-                    functools.partial(
-                        ip_pool_build, normalize=normalize, bucket_size=bucket_size
-                    )
-                )
+    @parameterized.parameters(*normalize_options)
+    def test_ip_pool(self, normalize):
+        self._test_build_fn(functools.partial(ip_pool_build, normalize=normalize))
 
-    def test_ip_ds_pool(self):
-        for bucket_size in (False, True):
-            for normalize in (False, True):
-                self._test_build_fn(
-                    functools.partial(
-                        ip_ds_pool_build, normalize=normalize, bucket_size=bucket_size
-                    )
-                )
+    @parameterized.parameters(*normalize_options)
+    def test_ip_ds_pool(self, normalize):
+        self._test_build_fn(functools.partial(ip_ds_pool_build, normalize=normalize))
 
 
 if __name__ == "__main__":

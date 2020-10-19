@@ -137,7 +137,7 @@ def rotate(
     angle=None,
     rotation_dim=2,
 ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
-    if isinstance(angle, tf.Tensor) or angle != 0:
+    if tf.is_tensor(angle) or angle != 0:
         positions, normals = _rotate(
             positions, normals, angle, rotation_dim=rotation_dim, impl=tf
         )

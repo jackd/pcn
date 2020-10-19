@@ -1,5 +1,6 @@
 numba
 kblocks@ git+git://github.com/jackd/kblocks.git
-multi-graph@ git+git://github.com/jackd/multi-graph.git
+meta-model@ git+git://github.com/jackd/meta-model.git
 shape-tfds@ git+git://github.com/jackd/shape-tfds.git
 numba-neighbors@ git+git://github.com/jackd/numba-neighbors.git
+composite-layers@ git+git://github.com/jackd/composite-layers.git

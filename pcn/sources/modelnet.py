@@ -26,7 +26,7 @@ class ModelnetSource(TfdsSource):
         super().__init__(builder=builder, split_map=split_map, **kwargs)
 
     def get_dataset(self, split) -> tf.data.Dataset:
-        dataset = super(ModelnetSource, self).get_dataset(split)
+        dataset = super().get_dataset(split)
         coords_map_fn = (
             self._train_map_fn if split == "train" else self._validation_map_fn
         )
