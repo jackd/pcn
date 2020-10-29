@@ -17,10 +17,11 @@ train/pcn.augment.uniform_scale_range = (0.8, 1.25)
 train/pcn.augment.shuffle = True
 train/pcn.augment.rotate_scheme = 'random'
 train/pcn.augment.drop_prob_limits = (0, 0.875)
+validation/pcn.augment.drop_prob_limits = (0, 0)  # ensures coords are ragged, consistent with training
 
 ModelnetSource.train_map_fn = @train/pcn.augment
 ModelnetSource.validation_map_fn = @validation/pcn.augment
-
+ModelnetSource.num_parallel_calls = %num_parallel_calls
 base_source = @pcn.sources.ModelnetSource()
 
 cache_repeats = 32

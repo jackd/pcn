@@ -1,5 +1,7 @@
 import tensorflow as tf
 
+import wtftf
+
 
 def jitter_positions(positions, stddev=0.01, clip=None):
     """
@@ -12,7 +14,7 @@ def jitter_positions(positions, stddev=0.01, clip=None):
     """
     if stddev == 0 or stddev is None:
         return positions
-    jitter = tf.random.normal(shape=tf.shape(positions), stddev=stddev)
+    jitter = wtftf.random.normal(shape=tf.shape(positions), stddev=stddev)
     if clip is not None:
         jitter = tf.clip_by_norm(jitter, clip, axes=[-1])
     return positions + jitter

@@ -1,9 +1,11 @@
+include "deterministic.gin"
+
 import kblocks.extras.cache
 import kblocks.extras.cache.tfrecords
 import kblocks.extras.callbacks.checkpoint
 import kblocks.framework.batchers
 import kblocks.framework.compilers
-import kblocks.framework.meta_model
+import kblocks.framework.meta_models
 import kblocks.framework.sources.pipelined
 import kblocks.keras.optimizers
 import kblocks.path
@@ -27,11 +29,12 @@ kb.path.model_dir.problem_id = %problem_id
 kb.path.model_dir.model_id = %model_id
 kb.path.model_dir.variant_id = %variant_id
 kb.path.model_dir.run = %run
+global_seed = %run
 
 kb.framework.PipelinedSource.clear_cache = %clear_cache
 kb.framework.PipelinedSource.cache_managers = @kb.cache.cache_managers()
 kb.framework.PipelinedSource.shuffle_buffer = %shuffle_buffer
-kb.framework.PipelinedSource.batcher = @kb.framework.RaggedBatcher()
+kb.framework.PipelinedSource.num_parallel_calls = %num_parallel_calls
 kb.framework.RaggedBatcher.batch_size = %batch_size
 kb.cache.cache_managers.root_dir = @cache/kb.path.model_dir()
 kb.cache.BaseCacheManager.preprocess = True
@@ -40,19 +43,21 @@ kb.cache.cache_managers.validation_impl = %cache_manager_impl
 cache/kb.path.model_dir.run = None
 cache/kb.path.model_dir.variant_id = 'cache'
 
-cache_manager_impl = @SnapshotManager
-SnapshotManager.compression = 'GZIP'  # one of 'GZIP', 'SNAPPY', 'AUTO', None
-SnapshotManager.preprocess = %preprocess
+## some cache manager implementations seem to have memory leaks?
+cache_manager_impl = @TFRecordsCacheManager
+TFRecordsCacheManager.compression = 'GZIP'
+TFRecordsCacheManager.num_parallel_calls = %num_parallel_calls
+TFRecordsCacheManager.deterministic = %deterministic
 
-# alternative cache manager implementations
-# cache_manager_impl = @TFRecordsCacheManager
-# TFRecordsCacheManager.compression = 'GZIP'
-# TFRecordsCacheManager.preprocess = preprocess
+## Note: SnapshotManager with preprocessing may have issues with tf-2.4
+# cache_manager_impl = @SnapshotManager
+# SnapshotManager.compression = 'GZIP'  # one of 'GZIP', 'SNAPPY', 'AUTO', None
+# SnapshotManager.preprocess = False
 
 # cache_manager_impl = @SaveLoadManager
 # SaveLoadManager.compression = 'GZIP'
 
-preprocess = False
+# cache_manager_impl = @BaseCacheManager
 
 shuffle_buffer = 1024
 
@@ -72,6 +77,8 @@ validation_cache_dir = @validation/cache/kb.path.model_dir()
 
 kb.callbacks.CheckpointCallback.save_freq = %save_freq
 save_freq = 1
+
+# use_custom_fit = True  # memory leak??
 
 # pcn.layers.SparseCloudConvolution.use_csr = True
 

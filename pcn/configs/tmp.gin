@@ -1,0 +1,5 @@
+# convenient config for fast experimentation
+kb.cache.cache_managers.train_impl = %cache_manager_impl
+cache_manager_impl = @BaseCacheManager
+clear_cache = True
+problem_id = 'tmp'

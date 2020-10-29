@@ -1,18 +1,20 @@
 import functools
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 import tensorflow as tf
 
 import meta_model.pipeline as pl
 import pcn.ops.utils as utils_ops
-from composite_layers import ragged
 from pcn.layers import conv as conv_layers
 from pcn.layers import tree as tree_layers
+from wtftf.ragged import layers as ragged_layers
+from wtftf.ragged import utils as ragged_utils
 
 IntTensor = tf.Tensor
 FloatTensor = tf.Tensor
 
 Lambda = tf.keras.layers.Lambda
+TensorMap = Callable[[tf.Tensor], tf.Tensor]
 
 
 @functools.wraps(tf.stack)
@@ -69,20 +71,19 @@ class RaggedStructure:
     @memoized_property
     def value_rowids(self) -> IntTensor:
         return tf.ragged.row_splits_to_segment_ids(self.row_splits)
-        # return Lambda(tf.ragged.row_splits_to_segment_ids)(self.row_splits)
 
     @memoized_property
     def nrows(self) -> IntTensor:
         return tf.size(self.row_starts)
 
-    def as_ragged(self, x) -> tf.RaggedTensor:
-        return ragged.from_row_splits(x, self.row_splits, validate=False)
+    def as_ragged(self, x, validate=True) -> tf.RaggedTensor:
+        return ragged_layers.from_row_splits(x, self.row_splits, validate=validate)
 
     @staticmethod
     def from_ragged(rt: tf.RaggedTensor):
-        if ragged.ragged_rank(rt) != 1:
+        if ragged_utils.ragged_rank(rt) != 1:
             raise NotImplementedError("TODO")
-        return RaggedStructure(ragged.row_splits(rt))
+        return RaggedStructure(ragged_layers.row_splits(rt))
 
     @staticmethod
     def from_dense(dense):
@@ -92,7 +93,7 @@ class RaggedStructure:
 
     @staticmethod
     def from_tensor(x):
-        if ragged.is_ragged(x):
+        if ragged_utils.is_ragged(x):
             return RaggedStructure.from_ragged(x)
         return RaggedStructure.from_dense(x)
 
@@ -119,19 +120,19 @@ class Cloud:
         model_coords = pl.model_input(batched_coords)
         self._model_structure = RaggedStructure.from_ragged(model_coords)
 
-        self._batched_coords = ragged.values(batched_coords)
-        self._model_coords = ragged.values(model_coords)
+        self._batched_coords = ragged_layers.values(batched_coords)
+        self._model_coords = ragged_layers.values(model_coords)
 
     @property
     def coords(self) -> FloatTensor:
         return self._coords
 
     @property
-    def batched_structure(self):
+    def batched_structure(self) -> RaggedStructure:
         return self._batched_structure
 
     @property
-    def model_structure(self):
+    def model_structure(self) -> FloatTensor:
         return self._model_structure
 
     @property
@@ -253,7 +254,7 @@ class SampledCloud(Cloud):
         batched_indices = pl.batch(pl.cache(indices))
         self._batched_structure = RaggedStructure.from_ragged(batched_indices)
         # post-batch
-        flat_batched_indices = ragged.values(batched_indices) + tf.gather(
+        flat_batched_indices = ragged_layers.values(batched_indices) + tf.gather(
             self.in_cloud.batched_structure.row_starts,
             self.batched_structure.value_rowids,
         )
@@ -261,7 +262,7 @@ class SampledCloud(Cloud):
             self._batched_structure.as_ragged(flat_batched_indices)
         )
         self._batched_indices = flat_batched_indices
-        self._model_indices = ragged.values(model_indices)
+        self._model_indices = ragged_layers.values(model_indices)
         self._model_structure = RaggedStructure.from_ragged(model_indices)
 
     @property
@@ -297,12 +298,12 @@ class SampledCloud(Cloud):
 
 def _ragged_to_block_sparse(args):
     ragged_indices, offset = args
-    assert ragged.ragged_rank(ragged_indices) == 2
-    b = ragged.value_rowids(ragged_indices)
-    ragged_indices = ragged.values(ragged_indices)
-    i = ragged.value_rowids(ragged_indices)
+    assert ragged_utils.ragged_rank(ragged_indices) == 2
+    b = ragged_layers.value_rowids(ragged_indices)
+    ragged_indices = ragged_layers.values(ragged_indices)
+    i = ragged_layers.value_rowids(ragged_indices)
     b = tf.gather(b, i)
-    j = ragged.values(ragged_indices)
+    j = ragged_layers.values(ragged_indices)
     j = j + tf.gather(offset, b)
     return i, j
 
@@ -313,28 +314,116 @@ def ragged_to_block_sparse(ragged_indices, offset):
 
 
 def neighborhood(
-    in_cloud, out_cloud, radius, indices, edge_features_fn, weight_fn, normalize=True
-):
+    in_cloud: Cloud,
+    out_cloud: Cloud,
+    radius: float,
+    indices: tf.RaggedTensor,
+    edge_features_fn: TensorMap,
+    weight_fn: Optional[TensorMap] = None,
+    normalize: bool = True,
+    version: str = "v0",
+) -> "Neighborhood":
+    """
+    Get a `Neighborhood` from relevant clouds and parameters.
 
-    indices = pl.cache(indices)
-    batched_indices = pl.batch(indices)
+    Args:
+        in_cloud: input cloud.
+        out_cloud: output cloud.
+        radius: radius of ball search
+        indices: pre-cache indices into `in_cloud` corresponding to neighbors
+            in `in_cloud` of `out_cloud`.
+        edge_features_fn: function producing (N, E?) edge features.
+        weights_fn: weighting function to apply to edge features, function of the
+            normalized edge length. If given, edge features are scaled by this value.
+        normalize: if True, edge features are divided by the sum over the neighborhood
+            of weights given by `weights_fn`.
+        version: string indicating version which influences what to cache / when
+            to apply various meta-ops. Supported:
+            "v0": cache only minimal values and compute relative coords, edge features
+                and weights in the model.
+            "v1": cache minimal values, compute relative coords post-batch, edge
+                features / weights in model.
+            "v2": cache minimal values, compute relative coords, edge features and
+                weights post-batch.
+            "v3": cache relative coordinates, compute edge features / weights in model.
+            "v4": cache relative coordinates, edge features and weights.
+
+    Returns:
+        `Neighborhood`.
+    """
+
+    def get_weights(rel_coords):
+        if weight_fn is None:
+            return None
+        return weight_fn(tf.linalg.norm(rel_coords, axis=-1))
+
+    cached_indices = pl.cache(indices)
+    batched_indices = pl.batch(cached_indices)
     # post-batch
     i, j = ragged_to_block_sparse(
         batched_indices, in_cloud.batched_structure.row_starts
     )
-    i = pl.model_input(i)
-    j = pl.model_input(j)
-    sparse_indices = tf_stack((i, j), axis=-1)
-    rel_coords = tf.gather(in_cloud.model_coords / radius, j) - tf.gather(
-        out_cloud.model_coords / radius, i
-    )
-    edge_features = edge_features_fn(rel_coords)
-    assert edge_features.shape[0] is not None
-    dists = tf.linalg.norm(rel_coords, axis=-1)
-    if weight_fn is None:
-        weights = None
+    model_i = pl.model_input(i)
+    model_j = pl.model_input(j)
+    sparse_indices = tf_stack((model_i, model_j), axis=-1)
+    if version == "v0":
+        # compute rel coords / edges features in model
+        rel_coords = tf.gather(in_cloud.model_coords / radius, model_j) - tf.gather(
+            out_cloud.model_coords / radius, model_i
+        )
+        edge_features = edge_features_fn(rel_coords)
+        weights = get_weights(rel_coords)
+    elif version == "v1":
+        # compute rel coords in batch, rest in model
+        rel_coords = tf.gather(in_cloud.batched_coords / radius, j) - tf.gather(
+            out_cloud.batched_coords / radius, i
+        )
+        rel_coords = pl.model_input(rel_coords)
+        # edge features in model
+        edge_features = edge_features_fn(rel_coords)
+        weights = get_weights(rel_coords)
+    elif version == "v2":
+        # compute edge features in batch
+        rel_coords = tf.gather(in_cloud.batched_coords / radius, j) - tf.gather(
+            out_cloud.batched_coords / radius, i
+        )
+        edge_features = edge_features_fn(rel_coords)
+        weights = get_weights(rel_coords)
+        edge_features = pl.model_input(edge_features)
+        weights = pl.model_input(weights)
+    elif version == "v3":
+        # cache relative coords
+        i = ragged_layers.value_rowids(indices)
+        j = ragged_layers.values(indices)
+        rel_coords = tf.gather(in_cloud.coords / radius, j) - tf.gather(
+            out_cloud.coords / radius, i
+        )
+        rel_coords = pl.model_input(pl.batch(pl.cache(rel_coords)))
+        rel_coords = ragged_layers.values(rel_coords)
+        edge_features = edge_features_fn(rel_coords)
+        weights = get_weights(rel_coords)
+    elif version == "v4":
+        # cache edge features / weights
+        i = ragged_layers.value_rowids(indices)
+        j = ragged_layers.values(indices)
+        rel_coords = tf.gather(in_cloud.coords / radius, j) - tf.gather(
+            out_cloud.coords / radius, i
+        )
+        edge_features = edge_features_fn(rel_coords)  # (N, E?)
+        edge_features = tf.transpose(edge_features, (1, 0))  # (E?, N)
+        edge_features = pl.batch(pl.cache(edge_features))  # (B, E?, N)
+        edge_features = pl.model_input(edge_features)
+        edge_features = ragged_layers.values(edge_features)  # (BE, N)
+        edge_features = tf.transpose(edge_features, (1, 0))  # (N, BE)
+
+        weights = get_weights(rel_coords)  # (E,)
+        weights = pl.model_input(pl.batch(pl.cache(weights)))  # (B, E?)
+        weights = ragged_layers.values(weights)  # (BE,)
     else:
-        weights = weight_fn(dists)
+        raise ValueError(f"invalid version {version}")
+
+    assert edge_features.shape[0] is not None
+
     return Neighborhood(
         in_cloud, out_cloud, sparse_indices, edge_features, weights, normalize=normalize
     )
@@ -419,7 +508,7 @@ class Neighborhood:
         node_features: Optional[FloatTensor],
         filters: int,
         activation=None,
-        **kwargs
+        **kwargs,
     ):
         return conv_layers.sparse_cloud_convolution(
             node_features,
@@ -428,5 +517,5 @@ class Neighborhood:
             self._out_cloud.model_structure.total_size,
             filters=filters,
             activation=activation,
-            **kwargs
+            **kwargs,
         )

@@ -1,0 +1,8 @@
+import kblocks.framework.sources
+import kblocks.tf_config
+
+kb.framework.PipelinedSource.num_parallel_calls = %num_parallel_calls
+kb.framework.PipelinedSource.deterministic = %deterministic
+
+num_parallel_calls = -1  # autotune
+deterministic = False

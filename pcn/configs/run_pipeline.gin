@@ -1,0 +1,4 @@
+import pcn.debug
+
+kb.main.fn = @pcn.debug.run_pipeline()
+pcn.debug.run_pipeline.trainable = %trainable
