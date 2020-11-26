@@ -1,3 +1,4 @@
+import functools
 from typing import Callable, Optional, Tuple
 
 import tensorflow as tf
@@ -7,22 +8,76 @@ from kblocks.tf_typing import DenseShape, TensorOrVariable
 TermImpl = Callable[[tf.Tensor, Tuple[tf.Tensor, tf.Tensor]], tf.Tensor]
 
 
+class SparseImplementation:
+    COO = "coo"
+    CSR = "csr"
+    GATHER_SUM = "gather_sum"
+    SORTED_GATHER_SUM = "sorted_gather_sum"
+
+    @classmethod
+    def all(cls):
+        return (
+            SparseImplementation.COO,
+            SparseImplementation.CSR,
+            SparseImplementation.GATHER_SUM,
+            SparseImplementation.SORTED_GATHER_SUM,
+        )
+
+    @classmethod
+    def validate(cls, value: str):
+        options = cls.all()
+        if value not in options:
+            raise ValueError(
+                f"Invalid {cls.__name__} {value}: must be one of {options}"
+            )
+
+
+class ReductionImplementation:
+    FOLD = "fold"
+    MAP = "map"
+    VMAP = "vmap"
+    UNSTACK = "unstack"
+
+    @classmethod
+    def all(cls):
+        return (
+            ReductionImplementation.FOLD,
+            ReductionImplementation.MAP,
+            ReductionImplementation.VMAP,
+            ReductionImplementation.UNSTACK,
+        )
+
+    @classmethod
+    def validate(cls, value: str):
+        options = cls.all()
+        if value not in options:
+            raise ValueError(
+                f"Invalid {cls.__name__} {value}: must be one of {options}"
+            )
+
+
 def map_reduce_sum(
-    map_fn, inputs, out_shape, out_type, parallel_iterations=None, method="unstack"
+    map_fn,
+    inputs,
+    out_shape,
+    out_type,
+    parallel_iterations=None,
+    method: str = ReductionImplementation.UNSTACK,
 ):
-    if method == "fold":
+    ReductionImplementation.validate(method)
+    if method == ReductionImplementation.FOLD:
         init = tf.zeros(out_shape, dtype=out_type)
         out = tf.foldl(lambda acc, args: acc + map_fn(args), inputs, init)
-    elif method == "map":
+    elif method == ReductionImplementation.MAP:
         out = tf.reduce_sum(
             tf.map_fn(
                 map_fn, inputs, parallel_iterations=parallel_iterations, dtype=out_type
             ),
             axis=0,
         )
-    elif method == "vmap":
+    elif method == ReductionImplementation.VMAP:
         out = tf.reduce_sum(tf.vectorized_map(map_fn, inputs), axis=0)
-    elif method == "unstack":
+    elif method == ReductionImplementation.UNSTACK:
         inputs = (tf.unstack(i, axis=0) for i in inputs)
         out = tf.add_n([map_fn(args) for args in zip(*inputs)])
     else:
@@ -124,7 +179,9 @@ def get_reordered_sparse_transform(sparse_indices: tf.Tensor, dense_shape: Dense
 
 
 def get_gather_sum_transform(
-    sparse_indices: tf.Tensor, dense_shape: Optional[DenseShape] = None
+    sparse_indices: tf.Tensor,
+    dense_shape: Optional[DenseShape] = None,
+    sorted_indices: bool = False,
 ):
     if isinstance(sparse_indices, (list, tuple)):
         i, j = sparse_indices
@@ -137,10 +194,33 @@ def get_gather_sum_transform(
         features = features * tf.expand_dims(edge_features, axis=-1)
         # features = tf.math.segment_sum(features, i)
         # features = segment_sum(features, i, out_size)
-        features = tf.math.unsorted_segment_sum(features, i, out_size)
+        if sorted_indices:
+            features = tf.math.segment_sum(features, i)
+            features = tf.pad(
+                features,
+                [
+                    [0, out_size - tf.shape(features, out_type=out_size.dtype)[0]],
+                    [0, 0],
+                ],
+            )
+        else:
+            features = tf.math.unsorted_segment_sum(features, i, out_size)
         return features
 
     return fn
+
+
+def get_sparse_impl(sparse_impl: str = SparseImplementation.COO) -> Callable:
+    SparseImplementation.validate(sparse_impl)
+    if sparse_impl == SparseImplementation.COO:
+        return get_sparse_transform
+    if sparse_impl == SparseImplementation.CSR:
+        return get_csr_transform
+    if sparse_impl == SparseImplementation.GATHER_SUM:
+        return functools.partial(get_gather_sum_transform, sorted_indices=False)
+    if sparse_impl == SparseImplementation.SORTED_GATHER_SUM:
+        return functools.partial(get_gather_sum_transform, sorted_indices=True)
+    raise NotImplementedError(f"sparse_impl {sparse_impl} not implemented")
 
 
 def sparse_conv(
@@ -150,8 +230,8 @@ def sparse_conv(
     kernel: TensorOrVariable,
     dense_shape: DenseShape,
     transform_first: Optional[bool] = None,
-    combine: str = "unstack",
-    use_csr: bool = False,
+    combine: str = ReductionImplementation.UNSTACK,
+    sparse_impl: str = SparseImplementation.COO,
 ):
     """
     Graph convolution.
@@ -166,24 +246,13 @@ def sparse_conv(
         transform_first: bool dictating whether to transform before or after
             sparse multiplication. Defaults to the option with fewer operations
             based on the same number of points.
-        combine: one of "fold", "unstack", "map".
+        combine: one of `ReductionImplementaiton.all()`.
+        sparse_impl: one of `SparseImplementation.all()`
 
     Returns:
         [N_out, F_out] float tensor of features.
     """
-    if use_csr:
-        # assert combine == "unstack"
-        # return csr_sparse_conv(
-        #     features=features,
-        #     edge_features=edge_features,
-        #     sparse_indices=sparse_indices,
-        #     kernel=kernel,
-        #     dense_shape=dense_shape,
-        #     transform_first=transform_first,
-        # )
-        term_impl = get_csr_transform
-    else:
-        term_impl = get_sparse_transform
+    term_impl = get_sparse_impl(sparse_impl)
     # term_impl = get_sparse_transform if is_ordered else get_gather_sum_transform
     T, F_in, F_out = kernel.shape
     if not isinstance(dense_shape, (list, tuple)):

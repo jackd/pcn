@@ -1,85 +1,72 @@
-import functools
 from typing import Optional
 
 import gin
 import tensorflow as tf
+import tensorflow_datasets as tfds
 
-import wtftf
-from kblocks.framework.sources import TfdsSource
-from shape_tfds.shape.modelnet.pointnet2 import Pointnet2H5
+import shape_tfds.shape.modelnet  # pylint: disable=unused-import
+from kblocks.data import transforms
+from kblocks.data.sources import DelegatingSource, TfdsSource
+from kblocks.utils import delegates
+from pcn.augment import augment
+from pcn.serialize import register_serializable
 
 
-def _map_fn(
-    coords_map_fn,
-    inputs,
-    labels,
-    weights=None,
-    rng: Optional[tf.random.Generator] = None,
-):
-    pos = inputs["positions"]
-    if rng is not None:
-        with wtftf.random.global_generator_context(rng):
-            coords = coords_map_fn(pos)
-    else:
-        coords = coords_map_fn(pos)
+@delegates(augment)
+def map_coords(cloud, labels, weights=None, **kwargs):
+    coords = cloud["positions"]
+    coords = augment(coords, **kwargs)
     return tf.keras.utils.pack_x_y_sample_weight(coords, labels, weights)
 
 
-@gin.configurable(module="pcn.sources")
-class ModelnetSource(TfdsSource):
+@gin.register(module="pcn.sources")
+@register_serializable
+@delegates(map_coords)
+class ModelnetSource(DelegatingSource):
     def __init__(
         self,
-        train_map_fn,
-        validation_map_fn,
-        builder=None,
-        split_map=None,
-        seed: int = 0,
-        num_parallel_calls: int = 1,  # 1 makes things deterministic
-        deterministic: bool = True,
-        **kwargs
+        split: str,
+        name: str = "pointnet2_h5",
+        shuffle_files: bool = False,
+        seed: Optional[int] = None,
+        read_config: Optional[tfds.core.utils.read_config.ReadConfig] = None,
+        up_dim: int = 1,
+        **kwargs,
     ):
-        if builder is None:
-            builder = Pointnet2H5()
-            if split_map is None:
-                split_map = {"validation": "test"}
-        self._train_map_fn = train_map_fn
-        self._validation_map_fn = validation_map_fn
-        self._train_rng = tf.random.Generator.from_seed(seed)
-        self._num_parallel_calls = num_parallel_calls
-        self._deterministic = deterministic
-        super().__init__(
-            builder=builder,
-            split_map=split_map,
-            modules={"rng": self._train_rng},
-            **kwargs,
+        self._aug_kwargs = kwargs
+        self._aug_kwargs["up_dim"] = up_dim
+        self._tfds_kwargs = dict(
+            split=split, name=name, shuffle_files=shuffle_files, read_config=read_config
         )
+        self._seed = seed
+        source = TfdsSource(as_supervised=True, **self._tfds_kwargs)
+        source = source.apply(
+            transforms.map_transform(
+                map_coords, arguments=self._aug_kwargs, use_rng=True, seed=seed,
+            )
+        )
+        super().__init__(source=source)
 
-    def get_dataset(self, split) -> tf.data.Dataset:
-        dataset = super().get_dataset(split)
-        coords_map_fn = (
-            self._train_map_fn if split == "train" else self._validation_map_fn
-        )
-        map_fn = functools.partial(_map_fn, coords_map_fn, rng=self._train_rng)
-        return dataset.map(
-            map_fn, self._num_parallel_calls, deterministic=self._deterministic
-        )
+    def get_config(self):
+        config = dict(self._aug_kwargs)
+        config.update(self._tfds_kwargs)
+        config["seed"] = self._seed
+        return config
 
 
-def vis_source(source: ModelnetSource, split="train"):
+def vis_source(source: ModelnetSource):
     import trimesh  # pylint:disable=import-outside-toplevel
 
-    dataset = source.get_dataset(split)
-    for coords, label in dataset:
+    dataset = source.dataset
+    for element in dataset:
+        coords, label, _ = tf.keras.utils.unpack_x_y_sample_weight(element)
         coords = coords.numpy()
         pc = trimesh.PointCloud(coords)
-        print(label.numpy())
-        print(tf.reduce_max(tf.linalg.norm(coords, axis=-1)).numpy())
+        print(f"label = {label.numpy()}")
+        print(f"max_norm = {tf.reduce_max(tf.linalg.norm(coords, axis=-1)).numpy()}")
         pc.show()
 
 
 if __name__ == "__main__":
-    from pcn.augment import augment
-
-    train_map_fn = functools.partial(augment, up_dim=1, rotate_scheme="random")
-    source = ModelnetSource(train_map_fn, train_map_fn)
+    source = ModelnetSource("train", up_dim=1, rotate_scheme="random")
     vis_source(source)

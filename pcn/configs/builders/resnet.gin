@@ -1,7 +1,7 @@
 include '../misc/l2-reg.gin'
 import pcn.builders.resnet
 
-build_fn = @pcn.builders.resnet
+meta_model_fn = @pcn.builders.resnet
 
 pcn.builders.resnet.filters0 = %filters0
 pcn.builders.resnet.num_levels = %num_levels
@@ -9,4 +9,4 @@ pcn.builders.resnet.num_levels = %num_levels
 filters0 = 32
 num_levels = 3
 
-model_id = 'resnet'
+family_id = 'resnet'

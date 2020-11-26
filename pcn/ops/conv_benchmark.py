@@ -14,8 +14,12 @@ import numpy as np
 import tensorflow as tf
 from absl import app, flags
 
-from kblocks.benchmark_utils import summarize, summarize_all
-from pcn.ops.conv import featureless_conv, sparse_conv
+from pcn.ops.conv import (
+    ReductionImplementation,
+    SparseImplementation,
+    featureless_conv,
+    sparse_conv,
+)
 
 flags.DEFINE_integer("ni", default=4096, help="number of points per cloud in")
 flags.DEFINE_integer("no", default=4096, help="number of points per cloud out")
@@ -26,15 +30,43 @@ flags.DEFINE_integer("b", default=8, help="batch_size")
 flags.DEFINE_integer("t", default=4, help="number of edge features")
 flags.DEFINE_bool("transform_first", default=False, help="dense matmul first")
 flags.DEFINE_string(
-    "combine", default="unstack", help='one of "fold", "map", "unstack"'
+    "combine",
+    default=ReductionImplementation.UNSTACK,
+    help=f"one of {ReductionImplementation.all()}",
 )
 flags.DEFINE_integer("burn", default=10, help="number of burn iterations")
 flags.DEFINE_integer("iters", default=100, help="number of iterations to average over")
 flags.DEFINE_boolean("jit", default=False, help="XLA jit compilation")
-flags.DEFINE_boolean(
-    "csr", default=False, help="Use CSR implementation (requires tf >= 2.3)"
+flags.DEFINE_string(
+    "sparse_impl",
+    default=SparseImplementation.COO,
+    help=f"Use sparse implementation to use, one of {SparseImplementation.all()}",
 )
 flags.DEFINE_integer("seed", default=0, help="seed for random number generation")
+
+
+def summarize(result, print_fn=print):
+    """
+    Args:
+        result: output of a tf.test.Benchmark.run_op_benchmark call.
+        print_fn: print-like function.
+    """
+    print_fn("Wall time (ms): {}".format(result["wall_time"] * 1000))
+    gpu_mem = result["extras"].get("allocator_maximum_num_bytes_GPU_0_bfc", 0)
+    print_fn("Memory (Mb):    {}".format(gpu_mem / 1024 ** 2))
+
+
+def summarize_all(*args, print_fn=print):
+    """
+    Applies `summarize` to (name, result) pairs.
+
+    Args:
+        *args: (name, result) pairs
+        print_fn: print-like function.
+    """
+    for name, result in args:
+        print_fn(name)
+        summarize(result, print_fn)
 
 
 def get_conv_args(
@@ -85,7 +117,7 @@ def get_conv_args(
 
 
 def conv_example(
-    use_csr: bool, combine: str, transform_first: bool, F_in: int, **kwargs
+    sparse_impl: str, combine: str, transform_first: bool, F_in: int, **kwargs
 ):
     sparse_indices, edge_features, dense_shape, features, kernel = get_conv_args(
         F_in=F_in, **kwargs
@@ -94,8 +126,6 @@ def conv_example(
         if F_in == 0:
             params = kernel
             tape.watch(params)
-            if use_csr:
-                raise ValueError("No CSR implementation for featureless conv")
             x = featureless_conv(edge_features, sparse_indices, kernel, dense_shape[0])
         else:
             params = kernel, features
@@ -106,7 +136,7 @@ def conv_example(
                 sparse_indices,
                 kernel,
                 dense_shape,
-                use_csr=use_csr,
+                sparse_impl=sparse_impl,
                 combine=combine,
                 transform_first=transform_first,
             )
@@ -145,7 +175,7 @@ def main(_):
         B=FLAGS.b,
         T=FLAGS.t,
         K=FLAGS.k,
-        use_csr=FLAGS.csr,
+        sparse_impl=FLAGS.sparse_impl,
         combine=FLAGS.combine,
         transform_first=FLAGS.transform_first,
         seed=FLAGS.seed,

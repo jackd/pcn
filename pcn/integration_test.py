@@ -4,15 +4,13 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import tensorflow as tf
-from absl import logging
 
-from kblocks.extras import cache
-from kblocks.framework.batchers import RaggedBatcher
-from kblocks.framework.compilers import compile_classification_model
-from kblocks.framework.meta_models import meta_model_trainable
-from pcn.augment import augment
+from kblocks.data import transforms
+from kblocks.trainables.meta_models import build_meta_model_trainable
 from pcn.builders.resnet import resnet
 from pcn.sources import ModelnetSource
+
+os.environ["TF_DETERMINISTIC_OPS"] = "1"
 
 
 def assert_all_equal(struct0, struct1):
@@ -26,66 +24,30 @@ def assert_all_close(struct0, struct1, **kwargs):
 
 
 class IntegrationTest(tf.test.TestCase):
-    def test_all(self):
-        # tests call tf.random.set_seed
-        self._test_modelnet_base_reproducible()
-        self._test_modelnet_resnet_self_consistent()
-
-    def _test_modelnet_base_reproducible(self):
-        def get_data(split):
-            tf.random.set_seed(0)
-            shared_kwargs = dict(up_dim=1, shuffle=True)
-            train_map_fn = functools.partial(
-                augment,
-                jitter_stddev=0.01,
-                jitter_clip=0.02,
-                angle_stddev=0.06,
-                angle_clip=0.18,
-                uniform_scale_range=(0.8, 1.25),
-                rotate_scheme="none",
-                drop_prob_limits=(0, 0.875),
-                **shared_kwargs
-            )
-            val_map_fn = functools.partial(augment, **shared_kwargs)
-            base_source = ModelnetSource(train_map_fn, val_map_fn)
-            return tuple(
-                tuple(x.numpy() for x in tf.nest.flatten(el, expand_composites=True))
-                for el in base_source.get_dataset(split)
-            )
-
-        train0 = get_data("train")
-        train1 = get_data("train")
-        assert_all_equal(train0, train1)
-        val0 = get_data("validation")
-        val1 = get_data("validation")
-        assert_all_equal(val0, val1)
-
-    def _test_modelnet_resnet_self_consistent(self):
+    def test_modelnet_resnet_self_consistent(self):
         num_repeats = 2
         batch_size = 16
-        epochs = num_repeats
 
-        def get_weights(cache_impl):
+        def get_weights(factory: transforms.CacheFactory):
+            # global seed affect initialization
             tf.random.set_seed(0)
+            # global generator seed affects split RNG initial state.
+            tf.random.set_global_generator(tf.random.Generator.from_seed(0))
             with TemporaryDirectory() as tmp_dir:
-                if cache_impl is None:
-                    train_impl = None
+                if factory is None:
+                    train_cache = None
                 else:
-                    train_impl = functools.partial(
-                        cache.RepeatCacheManager,
-                        num_repeats=2,
-                        manager_impl=cache_impl,
-                        shuffle_datasets=False,
-                        take_single=False,
+                    train_cache = transforms.RandomRepeatedCache(
+                        num_repeats=num_repeats,
+                        path=os.path.join(tmp_dir, "cache"),
+                        cache_factory=factory,
                     )
-                cache_managers = cache.cache_managers(
-                    os.path.join(tmp_dir, "cache"), train_impl, cache_impl
-                )
                 del tmp_dir
                 build_fn = functools.partial(resnet, filters0=2)
-                shared_kwargs = dict(up_dim=1, shuffle=True)
-                train_map_fn = functools.partial(
-                    augment,
+
+                train_source = ModelnetSource(
+                    split="train",
+                    shuffle=True,
                     jitter_stddev=0.01,
                     jitter_clip=0.02,
                     angle_stddev=0.06,
@@ -93,64 +55,49 @@ class IntegrationTest(tf.test.TestCase):
                     uniform_scale_range=(0.8, 1.25),
                     rotate_scheme="none",
                     drop_prob_limits=(0, 0.875),
-                    **shared_kwargs
-                )
-                val_map_fn = functools.partial(
-                    augment, **shared_kwargs, drop_prob_limits=(0, 0)
-                )
-                base_source = ModelnetSource(
-                    train_map_fn, val_map_fn, shuffle_files=False
-                ).take({"train": batch_size * 10, "validation": batch_size * 2})
-                batcher = RaggedBatcher(batch_size=batch_size)
-                optimizer = tf.keras.optimizers.Adam()
-                compiler = functools.partial(
-                    compile_classification_model, optimizer=optimizer
+                    seed=0,
                 )
 
-                trainable = meta_model_trainable(
+                trainable = build_meta_model_trainable(
                     build_fn,
-                    base_source,
-                    batcher,
-                    compiler,
-                    cache_managers=cache_managers,
-                    num_parallel_calls=1,
-                    shuffle_buffer=32,
-                    shuffle_seed=0,
+                    batcher=transforms.DenseToRaggedBatch(batch_size),
+                    train_source=train_source,
+                    loss=tf.keras.losses.SparseCategoricalCrossentropy(
+                        from_logits=True
+                    ),
+                    metrics=[tf.keras.metrics.SparseCategoricalAccuracy()],
+                    optimizer=tf.keras.optimizers.Adam(),
+                    shuffle_buffer=1024,
+                    pre_emptible=False,
+                    train_cache=train_cache,
                 )
                 model = trainable.model
-                weights0 = [w.numpy() for w in model.weights]
-                trainable.fit(epochs=epochs)
                 weights = [w.numpy() for w in model.weights]
                 data = tuple(
                     tuple(
                         x.numpy() for x in tf.nest.flatten(el, expand_composites=True)
                     )
-                    for el in trainable.source.get_dataset("train")
+                    for el in trainable.train_source.dataset
                 )
-            return data, weights0, weights
+                # we make no effort to fit the data, because sparse_dense matmuls are
+                # not perfectly deterministic
+            return data, weights
 
         def test_impl(impl):
-            data, w0, w = get_weights(impl)
-            data_, w0_, w_ = get_weights(impl)
-            assert_all_close(data, data_)
-            assert_all_equal(w0, w0_)
-            # no idea why the following fails.
-            # initial weights are the same, data is the same
-            assert_all_close(w, w_)
+            data, w = get_weights(impl)
+            data_, w_ = get_weights(impl)
+            assert_all_equal(data, data_)
+            assert_all_equal(w, w_)
 
         test_impl(None)
-        test_impl(functools.partial(cache.BaseCacheManager, preprocess=False))
-        test_impl(functools.partial(cache.BaseCacheManager, preprocess=True))
-        test_impl(cache.TFRecordsCacheManager)
-        test_impl(cache.SaveLoadManager)
-        test_impl(functools.partial(cache.SnapshotManager, preprocess=False))
-        if tf.version.VERSION.startswith("2.4.0-dev"):
-            logging.warning(
-                "Skipping SnapshotManager(preprocess=True) test - "
-                "see https://github.com/tensorflow/tensorflow/issues/44278"
-            )
-        else:
-            test_impl(functools.partial(cache.SnapshotManager, preprocess=True))
+        factories = (
+            transforms.CacheFactory(),
+            transforms.SaveLoadFactory(),
+            transforms.SnapshotFactory(),
+            transforms.TFRecordsFactory(),
+        )
+        for factory in factories:
+            test_impl(factory)
 
 
 if __name__ == "__main__":

@@ -1,89 +1,36 @@
-include "deterministic.gin"
+include "$KB_CONFIG/utils/deterministic.gin"
+include "$KB_CONFIG/utils/path.gin"
+include "$KB_CONFIG/trainable/meta-models.gin"
 
-import kblocks.extras.cache
-import kblocks.extras.cache.tfrecords
-import kblocks.extras.callbacks.checkpoint
-import kblocks.framework.batchers
-import kblocks.framework.compilers
-import kblocks.framework.meta_models
-import kblocks.framework.sources.pipelined
+import kblocks.data.transforms
 import kblocks.keras.optimizers
+import kblocks.logical
 import kblocks.path
-import pcn.augment
 import pcn.components
 
-trainable = @kb.framework.meta_model_trainable()
-kb.framework.meta_model_trainable.build_fn = %build_fn
-kb.framework.meta_model_trainable.base_source = %base_source
-kb.framework.meta_model_trainable.batcher = @kb.framework.RaggedBatcher()
-kb.framework.meta_model_trainable.compiler = %compiler
-kb.framework.meta_model_trainable.model_dir = %model_dir
-
-# kb.framework.fit.profile_batch = 2  # required for tf < 2.2
-kb.framework.fit.profile_batch = '2,12'
-
-
-model_dir = @kb.path.model_dir()
-kb.path.model_dir.root_dir = '~/pcn'
-kb.path.model_dir.problem_id = %problem_id
-kb.path.model_dir.model_id = %model_id
-kb.path.model_dir.variant_id = %variant_id
-kb.path.model_dir.run = %run
-global_seed = %run
-
-kb.framework.PipelinedSource.clear_cache = %clear_cache
-kb.framework.PipelinedSource.cache_managers = @kb.cache.cache_managers()
-kb.framework.PipelinedSource.shuffle_buffer = %shuffle_buffer
-kb.framework.PipelinedSource.num_parallel_calls = %num_parallel_calls
-kb.framework.RaggedBatcher.batch_size = %batch_size
-kb.cache.cache_managers.root_dir = @cache/kb.path.model_dir()
-kb.cache.BaseCacheManager.preprocess = True
-kb.cache.cache_managers.train_impl = %cache_manager_impl
-kb.cache.cache_managers.validation_impl = %cache_manager_impl
-cache/kb.path.model_dir.run = None
-cache/kb.path.model_dir.variant_id = 'cache'
-
-## some cache manager implementations seem to have memory leaks?
-cache_manager_impl = @TFRecordsCacheManager
-TFRecordsCacheManager.compression = 'GZIP'
-TFRecordsCacheManager.num_parallel_calls = %num_parallel_calls
-TFRecordsCacheManager.deterministic = %deterministic
-
-## Note: SnapshotManager with preprocessing may have issues with tf-2.4
-# cache_manager_impl = @SnapshotManager
-# SnapshotManager.compression = 'GZIP'  # one of 'GZIP', 'SNAPPY', 'AUTO', None
-# SnapshotManager.preprocess = False
-
-# cache_manager_impl = @SaveLoadManager
-# SaveLoadManager.compression = 'GZIP'
-
-# cache_manager_impl = @BaseCacheManager
-
-shuffle_buffer = 1024
-
-model_id = 'default_model'
-variant_id = 'default_variant'
-run = 0
-
-compiler = @kb.framework.compile_classification_model
-kb.framework.compile_classification_model.optimizer = %optimizer
 optimizer = @tf.keras.optimizers.Adam()
 
-# TfConfig.jit = True
-clear_cache = False
+batcher = @kb.data.DenseToRaggedBatch()
+kb.data.DenseToRaggedBatch.batch_size = %batch_size
 
-train_cache_dir = @train/cache/kb.path.model_dir()
-validation_cache_dir = @validation/cache/kb.path.model_dir()
+run = 0
+global_seed = %run
+global_generator_seed = 0  # allows reuse of cache files
 
-kb.callbacks.CheckpointCallback.save_freq = %save_freq
-save_freq = 1
+shuffle_buffer = 4096
 
-# use_custom_fit = True  # memory leak??
+root_dir = "~/pcn"
 
-# pcn.layers.SparseCloudConvolution.use_csr = True
+pre_emptible = False
+not_pre_emptible = @logical_not()
+not_pre_emptible/logical_not.cond = %pre_emptible
+
+
+# pcn.layers.SparseCloudConvolution.sparse_impl = "csr"
 
 # to define:
-# build_fn =
-# base_source =
+# meta_model_fn =
+# train/source =
+# validation/source =
 # batch_size =
 # problem_id =

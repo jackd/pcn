@@ -1,23 +1,21 @@
 from typing import Optional, Tuple
 
-import gin
 import tensorflow as tf
 
 import wtftf
 from pcn.augment import jitter, rigid
 
 
-@gin.configurable(module="pcn")
 def augment(
     coords,
-    num_points=1024,
-    shuffle=True,
-    rotate_scheme="none",
+    num_points: int = 1024,
+    shuffle: bool = True,
+    rotate_scheme: str = rigid.RotateScheme.NONE,
     angle_stddev: Optional[float] = None,
     angle_clip: Optional[float] = None,
     jitter_stddev: float = None,
     jitter_clip: float = None,
-    maybe_reflect_x=False,
+    maybe_reflect_x: bool = False,
     uniform_scale_range: Optional[Tuple[float, float]] = None,
     drop_prob_limits: Optional[Tuple[float, float]] = None,
     up_dim: int = 2,
@@ -69,7 +67,6 @@ def augment(
     return coords
 
 
-@gin.configurable(module="pcn")
 def augment_segmentation(
     coords,
     normals,

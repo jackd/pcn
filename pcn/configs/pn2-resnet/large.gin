@@ -1,4 +1,5 @@
 include 'base.gin'
 
 include '../builders/resnet.gin'
-problem_id = 'large'
+problem_id = 'pn2'
+family_id = 'large'

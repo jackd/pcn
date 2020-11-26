@@ -6,6 +6,23 @@ import tensorflow as tf
 import wtftf
 
 
+class RotateScheme:
+    NONE = "none"
+    RANDOM = "random"
+    PCA_XY = "pca-xy"
+
+    @classmethod
+    def all(cls):
+        return (RotateScheme.NONE, RotateScheme.RANDOM, RotateScheme.PCA_XY)
+
+    @classmethod
+    def validate(cls, value: str):
+        if value not in cls.all():
+            raise ValueError(
+                f"Invalid {cls.__name__} value {value} - must be in {cls.all()}"
+            )
+
+
 def _get_pc_tf(xy: tf.Tensor) -> tf.Tensor:
     s, u, v = tf.linalg.svd(xy)
     del s, u
@@ -166,15 +183,16 @@ def random_rigid_transform_matrix(stddev=0.02, clip=None, dim=3) -> tf.Tensor:
 
 
 def rotate_by_scheme(
-    positions, normals=None, scheme="random"
+    positions, normals=None, scheme: str = RotateScheme.RANDOM
 ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
     """scheme should be in ("random", "pca-xy", "none")."""
-    if scheme == "none":
+    RotateScheme.validate(scheme)
+    if scheme == RotateScheme.NONE:
         return positions, normals
 
-    if scheme == "pca-xy":
+    if scheme == RotateScheme.PCA_XY:
         angle = get_pca_xy_angle(positions)
-    elif scheme == "random":
+    elif scheme == RotateScheme.RANDOM:
         angle = wtftf.random.uniform(shape=(), dtype=positions.dtype) * (2 * np.pi)
     else:
         raise ValueError('Unrecognized scheme "%s"' % scheme)
@@ -205,8 +223,7 @@ def maybe_reflect(
 ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
     if normals is None:
         return _maybe_reflect((positions,), **kwargs)[0], normals
-    else:
-        return _maybe_reflect((positions, normals), **kwargs)
+    return _maybe_reflect((positions, normals), **kwargs)
 
 
 def random_scale(positions: tf.Tensor, stddev=None, uniform_range=None) -> tf.Tensor:

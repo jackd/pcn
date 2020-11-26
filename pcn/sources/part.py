@@ -84,7 +84,9 @@ class MetricMean(tf.keras.metrics.Metric):
         self.__metrics = tuple(metrics)
         super().__init__(**kwargs)
 
-    def update_state(self, y_true, y_pred, sample_weight=None):
+    def update_state(  # pylint: disable=arguments-differ
+        self, y_true, y_pred, sample_weight=None
+    ):
         pass
 
     def reset_states(self):
