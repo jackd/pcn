@@ -1,5 +1,5 @@
 numba
-kblocks@ git+git://github.com/jackd/kblocks.git@v0.1.0
+kblocks@ git+git://github.com/jackd/kblocks.git
 meta-model@ git+git://github.com/jackd/meta-model.git
 shape-tfds@ git+git://github.com/jackd/shape-tfds.git
 numba-neighbors@ git+git://github.com/jackd/numba-neighbors.git
