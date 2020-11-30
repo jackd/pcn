@@ -5,7 +5,7 @@ with open("requirements.txt") as fp:
 
 setup(
     name="pcn",
-    version="0.2.0",
+    version="0.3.0",
     description="Point Cloud Convolutional Networks for tensorflow",
     url="https://github.com/jackd/pcn.git",
     author="Dominic Jack",

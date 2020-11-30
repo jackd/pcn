@@ -1,7 +1,7 @@
 include '../misc/l2-reg.gin'
 import pcn.builders.resnet
 
-meta_model_fn = @pcn.builders.resnet_small
+meta_model_func = @pcn.builders.resnet_small
 
 pcn.builders.resnet_small.filters0 = %filters0
 pcn.builders.resnet_small.num_levels = %num_levels

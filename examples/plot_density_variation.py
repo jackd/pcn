@@ -10,8 +10,7 @@ python -m pcn '$KB_CONFIG/eval' '$PCN_CONFIG/pn2-resnet/large.gin' \
 python -m pcn '$KB_CONFIG/eval' '$PCN_CONFIG/pn2-resnet/large.gin' \
     --bindings='eval_num_points=64'
 python -m pcn '$KB_CONFIG/eval' '$PCN_CONFIG/pn2-resnet/large.gin' \
-    --bindings='eval_num_points=64\
-                shuffle_first=False'
+    --bindings='eval_num_points=64'
 ```
 
 normalized_accs -> pn2-resnet/large.gin
@@ -27,10 +26,6 @@ normalized_accs = [45.50, 74.72, 83.95, 88.49, 89.59, 90.19]
 unnormalized_accs = [48.34, 75.16, 83.31, 87.03, 88.94, 89.67]
 weightless_accs = [45.75, 73.46, 82.98, 87.93, 89.63, 89.63]
 
-# normalized_accs_shuff = [40.6, 71.92, 84.76, 88.49, 90.03, 90.7]
-# unnormalized_accs_shuff = [45.2, 72.89, 84.68, 88.37, 89.42, 90.3]
-# weightless_accs_shuff = [44.45, 73.91, 85.13, 88.70, 89.18, 89.70]
-
 normalized_nodrop_accs = [4.13, 9.36, 25.93, 61.51, 87.84, 89.91]
 unnormalized_nodrop_accs = [4.46, 6.56, 16.49, 57.82, 85.98, 90.64]
 
@@ -42,7 +37,6 @@ def add(accs, label, color, marker, linestyle):
     plt.scatter(log_points, accs, color=color, marker=marker)
 
 
-# add(weightless_accs, color="k", marker=".", label="unweighted")
 add(
     normalized_accs,
     color="b",

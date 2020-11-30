@@ -3,7 +3,7 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
-import wtftf
+import tfrng
 
 
 class RotateScheme:
@@ -133,7 +133,7 @@ def _rotate(positions, normals=None, angle=None, rotation_dim=2, impl=tf):
     """
     dtype = positions.dtype
     if angle is None:
-        angle = wtftf.random.uniform((), dtype=dtype) * (2 * np.pi)
+        angle = tfrng.uniform((), dtype=dtype) * (2 * np.pi)
 
     if normals is not None:
         assert normals.dtype == dtype
@@ -174,7 +174,7 @@ def reflect(xyz: tf.Tensor, dim: int = 0, axis: int = -1) -> tf.Tensor:
 
 
 def random_rigid_transform_matrix(stddev=0.02, clip=None, dim=3) -> tf.Tensor:
-    offset = wtftf.random.normal(shape=(dim, dim), stddev=stddev)
+    offset = tfrng.normal(shape=(dim, dim), stddev=stddev)
     if clip:
         offset = tf.clip_by_value(
             offset, -clip, clip
@@ -193,7 +193,7 @@ def rotate_by_scheme(
     if scheme == RotateScheme.PCA_XY:
         angle = get_pca_xy_angle(positions)
     elif scheme == RotateScheme.RANDOM:
-        angle = wtftf.random.uniform(shape=(), dtype=positions.dtype) * (2 * np.pi)
+        angle = tfrng.uniform(shape=(), dtype=positions.dtype) * (2 * np.pi)
     else:
         raise ValueError('Unrecognized scheme "%s"' % scheme)
     return rotate(positions, normals, angle)
@@ -210,7 +210,7 @@ def random_rigid_transform(
 
 
 def _maybe_reflect(positions, axis=-1, dim=0, prob=0.5):
-    should_reflect = wtftf.random.uniform(shape=(), dtype=tf.float32) > prob
+    should_reflect = tfrng.uniform(shape=(), dtype=tf.float32) > prob
     return tf.cond(
         should_reflect,
         lambda: tuple(reflect(p, dim=dim, axis=axis) for p in positions),
@@ -228,10 +228,10 @@ def maybe_reflect(
 
 def random_scale(positions: tf.Tensor, stddev=None, uniform_range=None) -> tf.Tensor:
     if stddev is not None:
-        scale = wtftf.random.truncated_normal(shape=(), mean=1.0, stddev=stddev)
+        scale = tfrng.truncated_normal(shape=(), mean=1.0, stddev=stddev)
     elif uniform_range is not None:
         minval, maxval = uniform_range
-        scale = wtftf.random.uniform(shape=(), minval=minval, maxval=maxval)
+        scale = tfrng.uniform(shape=(), minval=minval, maxval=maxval)
     else:
         raise NotImplementedError("One of stddev or uniform_range must be defined")
     return positions * scale
@@ -245,9 +245,9 @@ def random_rotation_matrix(
     # from tensorflow_graphics.geometry.transformation.rotation_matrix_3d \
     #   import from_axis_angle
     batch_shape = tuple(batch_shape)
-    axis = wtftf.random.normal(shape=batch_shape + (3,))
+    axis = tfrng.normal(shape=batch_shape + (3,))
     axis = axis / tf.linalg.norm(axis, axis=-1, keepdims=True)
-    angle = wtftf.random.normal(shape=batch_shape + (1,), stddev=angle_stddev)
+    angle = tfrng.normal(shape=batch_shape + (1,), stddev=angle_stddev)
     if angle_clip:
         angle = tf.clip_by_value(angle, -angle_clip, angle_clip)
     return from_axis_angle(axis, angle)

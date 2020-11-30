@@ -1,20 +1,16 @@
-# import kblocks.extras.callbacks
-import kblocks.keras.callbacks
+import kblocks.experiments.fit
 
-callbacks = [
-    @kb.callbacks.ReduceLROnPlateauModule(),
-    @kb.callbacks.EarlyStoppingModule(),
-    # @tf.keras.callbacks.ReduceLROnPlateau(),
-    # @tf.keras.callbacks.EarlyStopping()
-]
-kb.callbacks.ReduceLROnPlateauModule.patience = 20
-kb.callbacks.ReduceLROnPlateauModule.factor = 0.2
-kb.callbacks.ReduceLROnPlateauModule.monitor = %monitor
-kb.callbacks.ReduceLROnPlateauModule.mode = %mode
+kb.experiments.model_callbacks.reduce_lr_on_plateau_module = True
+kb.experiments.model_callbacks.early_stopping_module = True
 
-kb.callbacks.EarlyStoppingModule.patience = 41  # 2 * ReduceLROnPlateauModule.patience + 1
-kb.callbacks.EarlyStoppingModule.monitor = %monitor
-kb.callbacks.EarlyStoppingModule.mode = %mode
+tf.keras.callbacks.ReduceLROnPlateau.patience = 20
+tf.keras.callbacks.ReduceLROnPlateau.factor = 0.2
+tf.keras.callbacks.ReduceLROnPlateau.monitor = %monitor
+tf.keras.callbacks.ReduceLROnPlateau.mode = %mode
+
+tf.keras.callbacks.EarlyStopping.patience = 41  # 2 * ReduceLROnPlateau.patience + 1
+tf.keras.callbacks.EarlyStopping.monitor = %monitor
+tf.keras.callbacks.EarlyStopping.mode = %mode
 
 monitor = 'sparse_categorical_accuracy'  # training accuracy
 mode = 'max'

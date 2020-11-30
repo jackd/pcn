@@ -1,36 +1,38 @@
 include "$KB_CONFIG/utils/deterministic.gin"
 include "$KB_CONFIG/utils/path.gin"
-include "$KB_CONFIG/trainable/meta-models.gin"
+include "$KB_CONFIG/trainables/factories/build-meta-model.gin"
 
-import kblocks.data.transforms
+import kblocks.data
+import kblocks.experiments.fit
 import kblocks.keras.optimizers
 import kblocks.logical
 import kblocks.path
-import pcn.components
 
+kb.experiments.logging_callbacks.backup = True
 optimizer = @tf.keras.optimizers.Adam()
 
-batcher = @kb.data.DenseToRaggedBatch()
-kb.data.DenseToRaggedBatch.batch_size = %batch_size
+batcher = @kb.data.dense_to_ragged_batch()
+kb.data.dense_to_ragged_batch.batch_size = %batch_size
 
 run = 0
 global_seed = %run
 global_generator_seed = 0  # allows reuse of cache files
+data_seed = 0
 
 shuffle_buffer = 4096
 
-root_dir = "~/pcn"
+root_dir = @kb.path.expand()
+root_dir/kb.path.expand.path = "~/pcn"
 
-pre_emptible = False
-not_pre_emptible = @logical_not()
-not_pre_emptible/logical_not.cond = %pre_emptible
-
-
-# pcn.layers.SparseCloudConvolution.sparse_impl = "csr"
+cache_dir = @os.path.join()
+cache_dir/os.path.join.a = %family_dir
+cache_dir/os.path.join.p = 'cache'
 
 # to define:
-# meta_model_fn =
-# train/source =
-# validation/source =
-# batch_size =
-# problem_id =
+# meta_model_func: meta-model building function
+# train_data: base dataset before augmentation
+# validation_data: base dataset before augmentation
+# train_augment_func
+# validation_augment_func
+# batch_size: int
+# problem_id: str

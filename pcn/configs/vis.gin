@@ -1,0 +1,8 @@
+import kblocks.cli
+import pcn.vis
+
+main.fn = @pcn.vis.vis_cloud()
+pcn.vis.vis_cloud.dataset = %train_data
+pcn.vis.vis_cloud.augment_func = %train_augment_func
+
+optimizer = None

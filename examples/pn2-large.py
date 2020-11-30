@@ -1,4 +1,3 @@
-"""Simple non-configurable script demonstrating modelnet40 cls with large model."""
 import functools
 import os
 
@@ -7,13 +6,20 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 
 import shape_tfds.shape.modelnet  # pylint: disable=unused-import
-import tfrng
-from kblocks.data.transforms import Cache, RepeatedTFRecordsCache, TFRecordsFactory
-from kblocks.extras.callbacks import LearningRateLogger, PrintLogger
-from meta_model import pipeline as pl
+from kblocks.data import dense_to_ragged_batch, snapshot
+from kblocks.extras.callbacks import (
+    EarlyStoppingModule,
+    PrintLogger,
+    ReduceLROnPlateauModule,
+)
+from kblocks.models import compiled
+from kblocks.trainables import trainable_fit
+from kblocks.trainables.meta_models import build_meta_model_trainable
 from pcn.augment import augment
 from pcn.builders.resnet import resnet
 
+BackupAndRestore = tf.keras.callbacks.experimental.BackupAndRestore
+AUTOTUNE = tf.data.experimental.AUTOTUNE
 os.environ["TF_DETERMINISTIC_OPS"] = "1"
 
 gin.parse_config(
@@ -31,29 +37,20 @@ tf.keras.regularizers.l2.l2 = 4e-5
 )
 
 batch_size = 128
-save_dir = "/tmp/pcn/pn2/large"
+run = 0
+problem_dir = "/tmp/pcn/pn2/large"
+experiment_dir = os.path.join(problem_dir, f"run-{run:04d}")
 num_cache_repeats = 32
 epochs = 500
 reduce_lr_patience = 20
 reduce_lr_factor = 0.2
 early_stopping_patience = 41
-shuffle_buffer = 4096
-run = 12
-seed = 3
+shuffle_buffer = 1024
+seed = 0
 data_seed = 0
 validation_freq = 5
 
 tf.random.set_seed(seed)  # used for weight initialization
-
-# used in data augmentation
-tf.random.set_global_generator(tf.random.Generator.from_seed(data_seed))
-
-AUTOTUNE = tf.data.experimental.AUTOTUNE
-
-builder = tfds.builder(name="pointnet2_h5")
-builder.download_and_prepare(
-    download_config=tfds.core.download.DownloadConfig(verify_ssl=False)
-)
 
 
 def map_func(**aug_kwargs):
@@ -64,110 +61,81 @@ def map_func(**aug_kwargs):
     return func
 
 
-train_ds = builder.as_dataset(
+train_map_func = map_func(
+    jitter_stddev=0.01,
+    jitter_clip=0.02,
+    angle_stddev=0.06,
+    angle_clip=0.18,
+    uniform_scale_range=(0.8, 1.25),
+    drop_prob_limits=(0, 0.875),
+    shuffle=True,
+)
+
+validation_map_func = map_func(drop_prob_limits=(0, 0))
+
+train_ds = tfds.load(
+    name="pointnet2_h5",
     shuffle_files=True,
     split="train",
     as_supervised=True,
     read_config=tfds.core.utils.read_config.ReadConfig(
         shuffle_seed=0, shuffle_reshuffle_each_iteration=True
     ),
-).apply(
-    tfrng.data.stateless_map(
-        map_func(
-            jitter_stddev=0.01,
-            jitter_clip=0.02,
-            angle_stddev=0.06,
-            angle_clip=0.18,
-            uniform_scale_range=(0.8, 1.25),
-            drop_prob_limits=(0, 0.875),
-            shuffle=True,
-        ),
-        num_parallel_calls=tf.data.experimental.AUTOTUNE,
-        seed=data_seed,
-    )
-)
-# make validation coords ragged
-validation_ds = builder.as_dataset(
-    shuffle_files=False, split="test", as_supervised=True
-).map(map_func(drop_prob_limits=(0, 0)))
-
-meta_model_fn = functools.partial(resnet, num_classes=40)
-batcher = tf.data.experimental.dense_to_ragged_batch(batch_size)
-
-pipeline, model = pl.build_pipelined_model(
-    meta_model_fn, train_ds.element_spec, batcher
+    download_and_prepare_kwargs=dict(
+        download_config=tfds.core.download.DownloadConfig(verify_ssl=False)
+    ),
 )
 
-model.compile(
-    loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-    metrics=[
-        tf.keras.metrics.SparseCategoricalCrossentropy(from_logits=True),
-        tf.keras.metrics.SparseCategoricalAccuracy(),
-    ],
-    optimizer=tf.keras.optimizers.Adam(),
+validation_ds = tfds.load(
+    name="pointnet2_h5", shuffle_files=False, split="test", as_supervised=True
 )
 
-train_examples = len(train_ds)
-
-steps_per_epoch = train_examples // batch_size
-if train_examples % batch_size:
-    steps_per_epoch += 1
-
-train_cache_dir = os.path.join(save_dir, "cache", "train")
-train_ds = (
-    train_ds.map(pipeline.pre_cache_map_func(True), num_parallel_calls=1)
-    .apply(
-        RepeatedTFRecordsCache(path=train_cache_dir, num_repeats=32, compression="GZIP")
-    )
-    .repeat()
-    .shuffle(shuffle_buffer)
-    .map(pipeline.pre_batch_map_func(True), AUTOTUNE)
-    .apply(batcher)
-    .map(pipeline.post_batch_map_func(True))
-    .prefetch(AUTOTUNE)
-)
-
-validation_cache_dir = os.path.join(save_dir, "cache", "validation")
-validation_ds = (
-    validation_ds.map(pipeline.pre_cache_map_func(False), AUTOTUNE)
-    .map(pipeline.pre_batch_map_func(False), AUTOTUNE)
-    .apply(batcher)
-    .map(pipeline.post_batch_map_func(False))
-    # cache at end
-    # .apply(save_load(validation_cache_dir, "GZIP"))
-    .apply(
-        Cache(
-            cache_dir=validation_cache_dir, factory=TFRecordsFactory(compression="GZIP")
-        )
-    )
-    .prefetch(AUTOTUNE)
-)
+loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+metrics = [
+    tf.keras.metrics.SparseCategoricalCrossentropy(from_logits=True),
+    tf.keras.metrics.SparseCategoricalAccuracy(),
+]
+optimizer = tf.keras.optimizers.Adam()
 
 
 monitor_kwargs = dict(monitor="sparse_categorical_accuracy", mode="max")
-callbacks = [
-    tf.keras.callbacks.ReduceLROnPlateau(
+model_callbacks = [
+    ReduceLROnPlateauModule(
         patience=reduce_lr_patience, factor=reduce_lr_factor, **monitor_kwargs
     ),
-    tf.keras.callbacks.EarlyStopping(
-        patience=early_stopping_patience, **monitor_kwargs
-    ),
-    LearningRateLogger(),
-    PrintLogger(),
-    tf.keras.callbacks.TensorBoard(os.path.join(save_dir, f"run-{run:02d}")),
+    EarlyStoppingModule(patience=early_stopping_patience, **monitor_kwargs),
 ]
 
-model.fit(
-    train_ds,
-    steps_per_epoch=steps_per_epoch,
-    epochs=epochs,
-    validation_data=validation_ds,
-    validation_freq=validation_freq,
-    callbacks=callbacks,
+trainable = build_meta_model_trainable(
+    meta_model_func=functools.partial(resnet, num_classes=40),
+    train_dataset=train_ds,
+    validation_dataset=validation_ds,
+    batcher=dense_to_ragged_batch(batch_size=batch_size),
+    shuffle_buffer=shuffle_buffer,
+    compiler=functools.partial(
+        compiled, loss=loss, metrics=metrics, optimizer=optimizer
+    ),
+    cache_factory=functools.partial(snapshot, compression="GZIP"),
+    cache_dir=os.path.join(problem_dir, "cache"),
+    cache_repeats=num_cache_repeats,
+    train_augment_func=train_map_func,
+    validation_augment_func=validation_map_func,
+    callbacks=model_callbacks,
+    seed=data_seed,
 )
 
-# 7: RepeatedTFRecordsCache, 89.9%
-# 8: repeated TFRecordsFactory, 90.5%
-# 9: RepeatedTFRecordsCache without shuffle, 90.8%
-# 10: clear cache
-# 12: clear cache, tfrng transform, stateless_map, tfds read_config with shuffle seed
+logging_callbacks = [
+    PrintLogger(),
+    tf.keras.callbacks.TensorBoard(os.path.join(experiment_dir, "logs")),
+    BackupAndRestore(os.path.join(experiment_dir, "backup")),
+]
+
+fit = trainable_fit(
+    trainable=trainable,
+    callbacks=logging_callbacks,
+    epochs=epochs,
+    validation_freq=validation_freq,
+    experiment_dir=experiment_dir,
+)
+
+fit.run()
