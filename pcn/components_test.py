@@ -119,8 +119,10 @@ class ComponentsTest(tf.test.TestCase, parameterized.TestCase):
             build_fn, dataset.element_spec, batcher=batcher1
         )
 
-        ds = dataset.map(pipeline1.pre_cache_map).map(pipeline1.pre_batch_map)
-        ds1 = batcher1(ds).map(pipeline1.post_batch_map)
+        ds = dataset.map(pipeline1.pre_cache_map_func()).map(
+            pipeline1.pre_batch_map_func()
+        )
+        ds1 = batcher1(ds).map(pipeline1.post_batch_map_func())
         val1 = []
         for features, _ in ds1.take(batch_size):
             val = model(features)
@@ -132,8 +134,10 @@ class ComponentsTest(tf.test.TestCase, parameterized.TestCase):
             build_fn, dataset.element_spec, batcher=batcher
         )
 
-        ds = dataset.map(pipeline.pre_cache_map).map(pipeline.pre_batch_map)
-        ds_batched = batcher(ds).map(pipeline.post_batch_map)
+        ds = dataset.map(pipeline.pre_cache_map_func()).map(
+            pipeline.pre_batch_map_func()
+        )
+        ds_batched = batcher(ds).map(pipeline.post_batch_map_func())
         val_batched = None
         for features, _ in ds_batched:
             assert val_batched is None

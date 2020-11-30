@@ -1,9 +1,0 @@
-import kblocks.extras.cache
-
-kb.cache.cache_managers.train_impl = @kb.cache.RepeatCacheManager
-RepeatCacheManager.manager_impl = %cache_manager_impl
-
-RepeatCacheManager.num_repeats = %cache_repeats
-BaseCacheManager.preprocess = True
-
-# must define cache_repeats

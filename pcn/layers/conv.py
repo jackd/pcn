@@ -6,6 +6,9 @@ import tensorflow as tf
 
 from pcn.ops import conv as conv_ops
 
+SparseImplementation = conv_ops.SparseImplementation
+ReductionImplementation = conv_ops.ReductionImplementation
+
 IntTensor = tf.Tensor
 FloatTensor = tf.Tensor
 
@@ -33,7 +36,7 @@ class ConvolutionBase(layers.Layer):
         bias_constraint=None,
         **kwargs
     ):
-        super(ConvolutionBase, self).__init__(
+        super().__init__(
             activity_regularizer=regularizers.get(activity_regularizer), **kwargs
         )
         self.filters = int(filters)
@@ -136,12 +139,14 @@ class SparseCloudConvolution(ConvolutionBase):
         self,
         *args,
         transform_first: Optional[bool] = None,
-        combine: str = "unstack",
-        use_csr: bool = False,
+        combine: str = ReductionImplementation.UNSTACK,
+        sparse_impl: str = SparseImplementation.COO,
         **kwargs
     ):
+        ReductionImplementation.validate(combine)
+        SparseImplementation.validate(sparse_impl)
         self._conv_kwargs = dict(
-            transform_first=transform_first, combine=combine, use_csr=use_csr
+            transform_first=transform_first, combine=combine, sparse_impl=sparse_impl
         )
         super(SparseCloudConvolution, self).__init__(*args, **kwargs)
         self.input_spec = [
@@ -215,9 +220,9 @@ def sparse_cloud_convolution(
     if node_features is None:
         layer = FeaturelessSparseCloudConvolution(**kwargs)
         return layer([edge_features, indices, out_size])
-    else:
-        layer = SparseCloudConvolution(**kwargs)
-        return layer([node_features, edge_features, indices, out_size])
+
+    layer = SparseCloudConvolution(**kwargs)
+    return layer([node_features, edge_features, indices, out_size])
 
 
 @gin.configurable(module="pcn.layers")
@@ -229,7 +234,7 @@ class FlexMaxPool(layers.Layer):
             InputSpec(shape=(None, 2), dtype=tf.int64),
         ]
 
-    def call(self, inputs):
+    def call(self, inputs):  # pylint:disable=arguments-differ
         features, sparse_indices = inputs
         return conv_ops.sparse_flex_max_pool(features, sparse_indices)
 
@@ -243,6 +248,6 @@ class FlexUpSample(layers.Layer):
             InputSpec(shape=(None, 2), dtype=tf.int64),
         ]
 
-    def call(self, inputs):
+    def call(self, inputs):  # pylint:disable=arguments-differ
         features, sparse_indices = inputs
         return conv_ops.sparse_flex_up_sample(features, sparse_indices)

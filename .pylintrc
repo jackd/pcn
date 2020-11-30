@@ -16,6 +16,7 @@ disable=
     not-context-manager,
     redefined-builtin,
     attribute-defined-outside-init,
+    no-self-use,
 
 [format]
 

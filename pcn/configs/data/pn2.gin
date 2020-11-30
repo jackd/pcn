@@ -1,0 +1,35 @@
+import kblocks.configs
+import pcn.augment
+import pcn.configs
+import shape_tfds.shape.modelnet.pointnet2
+
+include "$KB_CONFIG/compilers/classification.gin"
+include "$KB_CONFIG/utils/tfds.gin"
+include "$PCN_CONFIG/data/aug/offline.gin"
+
+tfds.DownloadConfig.verify_ssl = False
+
+tfds_name = "pointnet2_h5"
+
+train_split = "train"
+validation_split = "test"
+
+train_augment_func = @train/pcn.augment_coords
+validation_augment_func = @validation/pcn.augment_coords
+
+cache_repeats = 32
+
+pcn.augment_coords.up_dim = 1
+pcn.augment_coords.shuffle = True
+
+train/pcn.augment_coords.jitter_stddev = 0.01
+train/pcn.augment_coords.jitter_clip = 0.02
+train/pcn.augment_coords.angle_stddev = 0.06
+train/pcn.augment_coords.angle_clip = 0.18
+train/pcn.augment_coords.uniform_scale_range = (0.8, 1.25)
+train/pcn.augment_coords.rotate_scheme = 'random'
+train/pcn.augment_coords.drop_prob_limits = (0, 0.875)
+
+validation/pcn.augment_coords.drop_prob_limits = (0, 0)  # ensures coords are ragged, consistent with training
+
+problem_id = 'pn2'

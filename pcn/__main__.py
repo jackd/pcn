@@ -1,5 +1,6 @@
 from absl import app
 
+import kblocks.configs  # pylint: disable=unused-import
 import pcn.configs  # pylint: disable=unused-import
 from kblocks import cli
 

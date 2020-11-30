@@ -6,4 +6,4 @@ tf.keras.layers.Dense.kernel_regularizer = %l2_reg
 pcn.layers.ConvolutionBase.kernel_regularizer = %l2_reg
 
 l2_reg = @tf.keras.regularizers.l2()
-tf.keras.regularizers.l2.l = 4e-5
+tf.keras.regularizers.l2.l2 = 4e-5

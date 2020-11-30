@@ -1,0 +1,9 @@
+include '../base.gin'
+include '../data/pn2.gin'
+include '../misc/rlrp.gin'
+
+train/pcn.augment_coords.rotate_scheme = 'none'
+
+batch_size = 128
+epochs = 500
+validation_freq = 5

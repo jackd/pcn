@@ -20,10 +20,12 @@ pip install -e pcn
 Train the large resnet model from the paper:
 
 ```bash
-python -m pcn '$KB_CONFIG/fit' '$PCN_CONFIG/pn2-resnet/large.gin'
+python -m pcn '$KB_CONFIG/trainables/fit.gin' '$PCN_CONFIG/trainables/large.gin'
 ```
 
-Note the first 32 epochs may take longer than the rest as the input data is processed online (this is saved to a [snapshot](https://www.tensorflow.org/api_docs/python/tf/data/experimental/snapshot) for the remaining epochs).
+See also [examples/pn2-large.py](examples/pn2-large.py) for a complete training example.
+
+Note the first time this is run 32 epochs of augmented data are cached. This may take some time.
 
 ## Project Structure
 
@@ -38,16 +40,29 @@ This project depends on multiple custom python packages. These are:
 
 `python -m pcn` is a light wrapper around `python -m kblocks` which exposes `$PCN_CONFIG` for command line argument just like `$KB_CONFIG` is exposed in `kblocks`. In particular, note that `$PCN_CONFIG` is set inside the python script, so must be passed as a string, e.g. `python -m pcn '$PCN_CONFIG/foo'` rather than `python -m pcn $PCN_CONFIG/foo`.
 
-## Benchmark Results
+### Example configurations
 
-To generate results from the paper
+Fit a large model with online data preprocessing, with run id 1.
 
-### Operation benchmarks
+```bash
+python -m pcn '$KB_CONFIG/trainables/fit.gin' \
+    '$PCN_CONFIG/trainables/large.gin' \
+    '$PCN_CONFIG/data/aug/online.gin' \
+    --bindings='run=1'
+```
+
+Visualize data augmentation (requires trimesh: `pip install trimesh`)
+
+```bash
+python -m pcn '$PCN_CONFIG/vis.gin' '$PCN_CONFIG/data/pn2.gin'
+```
+
+## Operation benchmarks
 
 Our operation benchmarks (Table 2) are generated using tensorflow's CSR matmul implementation (requires tensorflow 2.3), though the standard `tf.sparse.sparse_dense_matmul` implementation is almost as fast. The following generates the `N(F \Theta)-JIT` row from the paper.
 
 ```bash
-python pcn/ops/conv_benchmark.py --csr --transform_first --jit
+python pcn/ops/conv_benchmark.py --sparse_impl=csr --transform_first --jit
 ```
 
 Results on a GTX-1080Ti:
@@ -62,77 +77,33 @@ Wall time (ms): 4.087090492248535
 Memory (Mb):    49.00001525878906
 ```
 
-### Network benchmarks
+## Network benchmarks
 
-Values in Table 3 corresponds to `wall_time * examples_per_epoch / batch_size`.
-
-Results below are on an 8-core machine with GTX-1080Ti.
-
-#### Online preprocessing
-
-```bash
-python -m pcn '$KB_CONFIG/benchmark' \
-    '$PCN_CONFIG/pn2-resnet/large.gin' \
-    --bindings='
-        shuffle_buffer = None  # disable shuffling
-        cache_manager_impl = None  # preprocesses online
-        batch_size=1024  # default is 128
-        burn_iters=5  # default is 5
-        min_iters=20  # default is 100
-    '
-```
-
-Results:
-
-```txt
-Wall time (ms): 1259.9842548370361
-Memory (Mb):    1852.4022178649902
-```
-
-#### Offline preprocessing
-
-This will take a while if cached files have not been created yet.
-
-```bash
-python -m pcn '$KB_CONFIG/benchmark' \
-    '$PCN_CONFIG/pn2-resnet/large.gin' \
-    --bindings='
-        preprocess=True
-        batch_size=1024
-    '
-```
-
-Results
-
-```txt
-Wall time (ms): 1259.9842548370361
-Memory (Mb):    1852.4022178649902
-```
+Values in Table 3 corresponds to `batch_time * examples_per_epoch / batch_size`.
 
 ## FAQ
 
-Q: `~/pcn` is massive! Is there any way to make things smaller?
+Q: Caching takes a while. Is there any way to make it faster?
 
-A: Most of this is preprocessed cache files. Compression can be turned on to reduce this at the cost of a slight training slow-down by using `TFRecordsCacheManager.compression = 'GZIP'`.
+A: There are many different caching options available in [kblocks/data/cache](https://github.com/jackd/kblocks/blob/master/kblocks/data/cache.py) Default configuration is defined in [data/aug/offline.gin](pcn/configs/data/aug/offline.gin). Currently we use `tfrecords_cache` which is a custom implementation. Options include:
 
-Q: Why is caching so complicated? Why not just use `tf.data.Dataset.cache` or `tf.data.experimental.snapshot`?
+- `kblocks.data.tfrecords_cache`: a custom implementation
+  - supports compression
+  - eager
+  - possibly ~10% slower than other options?
+- `kblocks.data.cache`: wraps `tf.data.Dataset.cache`
+  - does not support compression
+  - lazy
+- `kblocks.data.snapshot`: wraps `tf.data.experimental.snapshot`
+  - supports compression
+  - lazy
+  - memory leak in tf-nightly (2.5) ?
+- `kblocks.data.save_load_cache`: combines `tf.data.experimental.[save,load]`
+  - supports compression
+  - eager
+  - memory leak in tf-nightly (2.5) ?
 
-A: These other options are supported, though all except the default exhibit slow but monotonic memory increases, hence the default `TFRecordsCacheManager`.
+Other options to reduce initial caching time include:
 
-```bash
-# using tf.data.Dataset.cache
-cache_managers.train_impl = @BaseCacheManager
-cache_managers.validation_impl = @BaseCacheManager
-```
-
-```bash
-# using tf.data.experimental.snapshot
-cache_managers.train_impl = @SnapshotManager
-cache_managers.validation_impl = @SnapshotManager
-```
-
-```bash
-# using tf.data.experimental.[save|load]
-cache_managers.train_impl = @SaveLoadManager
-cache_managers.validation_impl = @SaveLoadManager
-```
+- reducing the number of `cache_repeats` (e.g. `cache_repeats = 16`)
+- using online augmentation (`include "$PCN_CONFIG/data/aug/online.gin"`)
