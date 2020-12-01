@@ -2,9 +2,9 @@ from typing import Optional, Tuple
 
 import gin
 import tensorflow as tf
-
 import tfrng
 from kblocks.utils import delegates
+
 from pcn.augment import jitter, rigid
 
 

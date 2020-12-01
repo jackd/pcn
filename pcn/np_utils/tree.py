@@ -2,7 +2,6 @@ from typing import Optional
 
 import numpy as np
 from numba import njit
-
 from numba_neighbors import binary_tree as bt
 from numba_neighbors.kd_tree import KDTree3
 
@@ -130,8 +129,8 @@ def ragged_down_sample_query(
 
 
 def knn_query(in_coords, out_coords, k: int):
-    from pykdtree.kdtree import (  # pylint: disable=no-name-in-module,import-outside-toplevel
-        KDTree as pyKDTree,
+    from pykdtree.kdtree import (
+        KDTree as pyKDTree,  # pylint: disable=no-name-in-module,import-outside-toplevel
     )
 
     tree = pyKDTree(in_coords)

@@ -1,12 +1,12 @@
 from typing import Callable, Optional
 
 import gin
+import meta_model.pipeline as pl
 import numpy as np
 import tensorflow as tf
-
-import meta_model.pipeline as pl
-import pcn.components as comp
 from kblocks.keras import layers
+
+import pcn.components as comp
 from pcn.builders.utils import hat_weight, polynomial_edge_features, simple_mlp
 
 Lambda = tf.keras.layers.Lambda

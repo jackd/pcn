@@ -2,10 +2,9 @@ import functools
 import os
 
 import gin
+import shape_tfds.shape.modelnet  # pylint: disable=unused-import
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
-import shape_tfds.shape.modelnet  # pylint: disable=unused-import
 from kblocks.data import dense_to_ragged_batch, snapshot
 from kblocks.extras.callbacks import (
     EarlyStoppingModule,
@@ -15,6 +14,7 @@ from kblocks.extras.callbacks import (
 from kblocks.models import compiled
 from kblocks.trainables import trainable_fit
 from kblocks.trainables.meta_models import build_meta_model_trainable
+
 from pcn.augment import augment
 from pcn.builders.resnet import resnet
 

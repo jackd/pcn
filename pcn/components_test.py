@@ -1,12 +1,12 @@
 import functools
 
+import meta_model.pipeline as pl
 import numpy as np
 import tensorflow as tf
 from absl.testing import parameterized
-
-import meta_model.pipeline as pl
-import pcn.components as comp
 from meta_model.batchers import RaggedBatcher
+
+import pcn.components as comp
 from pcn.builders.utils import hat_weight, polynomial_edge_features
 
 

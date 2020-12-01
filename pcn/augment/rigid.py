@@ -2,7 +2,6 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
-
 import tfrng
 
 

@@ -2,7 +2,6 @@ import functools
 from typing import Callable, Optional, Tuple
 
 import tensorflow as tf
-
 from kblocks.tf_typing import DenseShape, TensorOrVariable
 
 TermImpl = Callable[[tf.Tensor, Tuple[tf.Tensor, tf.Tensor]], tf.Tensor]

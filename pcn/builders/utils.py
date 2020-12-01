@@ -1,6 +1,5 @@
 import gin
 import tensorflow as tf
-
 from kblocks.keras import layers
 from kblocks.ops import polynomials
 

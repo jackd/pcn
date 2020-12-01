@@ -1,15 +1,15 @@
 import functools
 from typing import Callable, Optional, Tuple
 
-import tensorflow as tf
-
 import meta_model.pipeline as pl
-import pcn.ops.utils as utils_ops
-from pcn.layers import conv as conv_layers
-from pcn.layers import tree as tree_layers
+import tensorflow as tf
 from wtftf.meta import memoized_property
 from wtftf.ragged import layers as ragged_layers
 from wtftf.ragged.utils import RaggedStructure, ragged_rank
+
+import pcn.ops.utils as utils_ops
+from pcn.layers import conv as conv_layers
+from pcn.layers import tree as tree_layers
 
 IntTensor = tf.Tensor
 FloatTensor = tf.Tensor

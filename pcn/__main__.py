@@ -1,8 +1,8 @@
-from absl import app
-
 import kblocks.configs  # pylint: disable=unused-import
-import pcn.configs  # pylint: disable=unused-import
+from absl import app
 from kblocks import cli
+
+import pcn.configs  # pylint: disable=unused-import
 
 
 def cli_main(argv):
