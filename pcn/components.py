@@ -1,5 +1,5 @@
 import functools
-from typing import Any, Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 import tensorflow as tf
 
@@ -7,8 +7,9 @@ import meta_model.pipeline as pl
 import pcn.ops.utils as utils_ops
 from pcn.layers import conv as conv_layers
 from pcn.layers import tree as tree_layers
+from wtftf.meta import memoized_property
 from wtftf.ragged import layers as ragged_layers
-from wtftf.ragged import utils as ragged_utils
+from wtftf.ragged.utils import RaggedStructure, ragged_rank
 
 IntTensor = tf.Tensor
 FloatTensor = tf.Tensor
@@ -24,78 +25,6 @@ def tf_stack(values, axis=0, name=None):
         name = values[0].graph.unique_name("stack")
         return tf.stack(values, axis=axis, name=name)
     return tf.stack(values, axis=axis, name=name)
-
-
-class memoized_property(property):  # pylint: disable=invalid-name
-    """Descriptor that mimics @property but caches output in member variable."""
-
-    def __get__(self, obj: Any, type: Optional[type] = ...) -> Any:
-        # See https://docs.python.org/3/howto/descriptor.html#properties
-        if obj is None:
-            return self
-        if self.fget is None:
-            raise AttributeError("unreadable attribute")
-        attr = "__cached_" + self.fget.__name__
-        cached = getattr(obj, attr, None)
-        if cached is None:
-            # cached = self.fget(obj)
-            cached = super().__get__(obj, type)
-            setattr(obj, attr, cached)
-        return cached
-
-
-class RaggedStructure:
-    def __init__(self, row_splits):
-        self._row_splits = row_splits
-
-    @property
-    def row_splits(self):
-        return self._row_splits
-
-    @memoized_property
-    def total_size(self):
-        return self.row_splits[-1]
-
-    @memoized_property
-    def row_starts(self) -> IntTensor:
-        return self._row_splits[:-1]
-
-    @memoized_property
-    def row_ends(self) -> IntTensor:
-        return self._row_splits[1:]
-
-    @memoized_property
-    def row_lengths(self) -> IntTensor:
-        return self.row_ends - self.row_starts
-
-    @memoized_property
-    def value_rowids(self) -> IntTensor:
-        return tf.ragged.row_splits_to_segment_ids(self.row_splits)
-
-    @memoized_property
-    def nrows(self) -> IntTensor:
-        return tf.size(self.row_starts)
-
-    def as_ragged(self, x, validate=True) -> tf.RaggedTensor:
-        return ragged_layers.from_row_splits(x, self.row_splits, validate=validate)
-
-    @staticmethod
-    def from_ragged(rt: tf.RaggedTensor):
-        if ragged_utils.ragged_rank(rt) != 1:
-            raise NotImplementedError("TODO")
-        return RaggedStructure(ragged_layers.row_splits(rt))
-
-    @staticmethod
-    def from_dense(dense):
-        bs, n = tf.unstack(tf.shape(dense)[:2])
-        row_splits = tf.range(0, (bs + 1) * n, n, dtype=tf.int64)
-        return RaggedStructure(row_splits)
-
-    @staticmethod
-    def from_tensor(x):
-        if ragged_utils.is_ragged(x):
-            return RaggedStructure.from_ragged(x)
-        return RaggedStructure.from_dense(x)
 
 
 def _as_ragged(x):
@@ -298,7 +227,7 @@ class SampledCloud(Cloud):
 
 def _ragged_to_block_sparse(args):
     ragged_indices, offset = args
-    assert ragged_utils.ragged_rank(ragged_indices) == 2
+    assert ragged_rank(ragged_indices) == 2
     b = ragged_layers.value_rowids(ragged_indices)
     ragged_indices = ragged_layers.values(ragged_indices)
     i = ragged_layers.value_rowids(ragged_indices)
