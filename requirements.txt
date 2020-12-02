@@ -1,3 +1,4 @@
+absl-py
 numba
 kblocks@ git+git://github.com/jackd/kblocks.git
 meta-model@ git+git://github.com/jackd/meta-model.git
