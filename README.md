@@ -5,6 +5,8 @@ Point Cloud and Event Stream Networks_, ACCV2020.
 
 - [ACCV 2020 Paper](paper)
 - [sccd repository](https://github.com/jackd/sccd)
+- [Spotlight Video](https://youtu.be/OihcDbfT1ks) (1min)
+- [Oral Presentation](https://youtu.be/26GDhWfU280) (9min)
 
 ```tex
 @InProceedings{Jack_2020_ACCV,
@@ -27,7 +29,9 @@ pip install tensorflow  # requires at least 2.3
 
 # pip packages from git
 git clone https://github.com/jackd/pcn.git
-pip install -e pcn
+cd pcn
+pip install -r requirements.txt
+pip install -e .
 ```
 
 ### Train
@@ -57,6 +61,13 @@ This project depends on multiple custom python packages. These are:
 - [wtftf](https://github.com/jackd/wtftf) for keras layer wrappers for composite tensors in tensorflow 2.3.
 - [shape-tfds](https://github.com/jackd/shape-tfds) for [tensorflow-datasets](https://github.com/tensorflow/datasets) implementations that manage dataset downloading and model-independent preprocessing for 3D shape-based datasets.
 - [numba-neighbors](https://github.com/jackd/numba-neighbors) for [numba](https://github.com/numba/numba) implementations of KDTree ball searches and subsampling.
+
+## Saved Data
+
+Running with the default configurations will result in data files created in:
+
+- `~/tensorflow_datasets/`: downloads, extracted files and basic preprocessing of events into `tfrecords` files.
+- `~/pcn/`: configuration logs, model checkpoints, training summaries and cached datasets (potentially hundreds of GBs - see below).
 
 ### Example configurations
 
