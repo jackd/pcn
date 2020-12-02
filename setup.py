@@ -12,6 +12,7 @@ setup(
     author_email="thedomjack@gmail.com",
     license="MIT",
     packages=find_packages(),
+    package_data={"pcn": ["configs/**/*.gin"]},
     requirements=install_requires,
     zip_safe=True,
 )
