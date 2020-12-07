@@ -4,6 +4,7 @@ import gin
 import meta_model.pipeline as pl
 import numpy as np
 import tensorflow as tf
+from kblocks.extras.layers import Dropout
 from kblocks.keras import layers
 
 import pcn.components as comp
@@ -41,13 +42,13 @@ def conv_block(
     branch = layers.BatchNormalization(name=f"{name}-branch-bn2")(branch)
 
     if dropout_rate is not None and dropout_rate > 0:
-        branch = layers.Dropout(dropout_rate)(branch)
+        branch = Dropout(dropout_rate)(branch)
 
     shortcut = tf.gather(shortcut, sample_indices)
     shortcut = layers.Dense(filters, name=f"{name}-short-d0")(shortcut)
     shortcut = layers.BatchNormalization(name=f"{name}-short-bn0")(shortcut)
     if dropout_rate is not None and dropout_rate > 0:
-        shortcut = layers.Dropout(dropout_rate)(shortcut)
+        shortcut = Dropout(dropout_rate)(shortcut)
 
     features = tf.keras.layers.Add(name=f"{name}-add")([shortcut, branch])
     features = tf.keras.layers.Activation("relu")(features)
@@ -71,7 +72,7 @@ def up_sample_block(
     branch = layers.BatchNormalization(name=f"{name}-branch-bn0")(branch)
 
     if dropout_rate is not None and dropout_rate > 0:
-        branch = layers.Dropout(dropout_rate)(branch)
+        branch = Dropout(dropout_rate)(branch)
 
     features = tf.keras.layers.Add(name=f"{name}-add")([shortcut, branch])
     features = tf.keras.layers.Activation("relu")(features)
@@ -106,7 +107,7 @@ def identity_block(
     # no activation
     branch = layers.BatchNormalization(name=f"{name}-branch-bn2")(branch)
     if dropout_rate is not None and dropout_rate > 0:
-        branch = layers.Dropout(dropout_rate)(branch)
+        branch = Dropout(dropout_rate)(branch)
 
     features = tf.keras.layers.Add(name=f"{name}-add")([shortcut, branch])
     features = tf.keras.layers.Activation("relu")(features)
@@ -280,7 +281,7 @@ def resnet_small(
     features = ds_neigh.convolve(features, filters0, activation=None)
     features = layers.BatchNormalization(name="c0-bn1")(features)
     if dropout_rate is not None and dropout_rate > 0:
-        features = layers.Dropout(dropout_rate)(features)
+        features = Dropout(dropout_rate)(features)
     features = tf.keras.layers.Activation("relu")(features)
 
     in_cloud = out_cloud

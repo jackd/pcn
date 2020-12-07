@@ -16,7 +16,7 @@ kb.data.dense_to_ragged_batch.batch_size = %batch_size
 
 run = 0
 global_seed = %run
-global_generator_seed = 0  # allows reuse of cache files
+global_generator_seed = %global_seed
 data_seed = 0
 
 shuffle_buffer = 4096

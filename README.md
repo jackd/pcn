@@ -187,6 +187,13 @@ Other options to reduce initial caching time include:
 - reducing the number of `cache_repeats` (e.g. `cache_repeats = 16`)
 - using online augmentation (e.g. `include "$PCN_CONFIG/data/aug/online.gin"`)
 
+## Reproducibility
+
+Effort has been made to make training fully deterministic (i.e. produce identical floating point vlaues). Two outstanding issues remain:
+
+- _non-deterministic ops_: nvidia's [determinism repository](https://github.com/NVIDIA/framework-determinism) lists certain operations as non-deterministic. These include the sparse-dense matrix multiplications included in the cloud convolution operations. This will hopefully be address in tensorflow soon.
+- _uncheckpointable cached datasets_: training uses the default `track_iterator=False` in `kblocks.models.fit`, meaning training over separate calls (e.g. because of pre-emption) will not save or restore training dataset iterator state. This may work with some `cache` implementations. This should not affect results for models trained in a single session.
+
 [paper]: https://openaccess.thecvf.com/content/ACCV2020/html/Jack_Sparse_Convolutions_on_Continuous_Domains_for_Point_Cloud_and_Event_ACCV_2020_paper.html
 [kblocks]: https://github.com/jackd/kblocks
 [gin-config]: https://github.com/google/gin-config
